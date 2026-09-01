@@ -10,7 +10,7 @@
 **App Name:** Russian Timer
 **Platforms:** iOS (primary) + macOS (Catalyst or native SwiftUI)
 **Purpose:** A minimal, distraction-free timer for tracking daily and cumulative Russian study time.
-**Target User:** Law school applicants self-studying for the Russian who want a frictionless way to track study hours.
+**Target User:** Self-directed Russian language learners who want a frictionless way to track study hours across grammar, immersion, and output practice.
 
 ---
 
@@ -316,7 +316,7 @@ class StudySession {
 ## Design Context
 
 ### Users
-Law school applicants self-studying for the Russian — typically alone, often at a desk or library, in long focused sessions. The app is opened briefly to start or pause the timer, then set aside. The primary job-to-be-done is accurate passive tracking, not active engagement. Users return to the stats screen occasionally to feel a sense of progress over weeks of preparation.
+Self-directed Russian language learners — typically alone, at a desk, on a commute, or with media playing, in long focused sessions. The app is opened briefly to start or pause the timer and pick a study type, then set aside. The primary job-to-be-done is accurate passive tracking, not active engagement. Users return to the stats screen occasionally to feel a sense of progress over months of study, and to see how their time splits across grammar, immersion, and output.
 
 ### Brand Personality
 **Three words: Minimal · Warm · Trustworthy**

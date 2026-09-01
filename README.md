@@ -1,6 +1,6 @@
 # Russian Timer
 
-A minimal, distraction-free iOS app for tracking daily and cumulative Russian study time. Built for law school applicants self-studying for the Russian who want a frictionless way to log hours without any gamification or pressure.
+A minimal, distraction-free iOS app for tracking daily and cumulative Russian study time, split across three study types — grammar, immersion, and output. Built for self-directed language learners who want a frictionless way to log hours without any gamification or pressure.
 
 ---
 
