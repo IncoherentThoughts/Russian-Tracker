@@ -4,16 +4,6 @@ import Observation
 import ActivityKit
 #endif
 
-// MARK: - Shared UserDefaults keys
-private enum TimerKey {
-    static let dailyElapsed  = "dailyElapsed"
-    static let totalElapsed  = "totalElapsed"
-    static let lastResetDate = "lastResetDate"
-    static let timerRunning  = "timerRunning"
-    static let timerStartedAt = "timerStartedAt"
-    static let dailyGoal     = "dailyGoal"
-}
-
 @Observable
 final class TimerManager {
     // MARK: - Observed state (drives UI)
@@ -22,10 +12,19 @@ final class TimerManager {
     private(set) var isRunning: Bool = false
     private(set) var tick: Int = 0
 
+    /// The study type the clock is currently crediting. The timer itself is
+    /// unaffected by this — it always counts total time for the day.
+    private(set) var mode: StudyType = .grammar
+
+    /// Seconds credited to each type, for today and for all time. These are the
+    /// stored bases; add the in-flight slice via `computedDaily(for:)`.
+    private(set) var dailyByType: [StudyType: TimeInterval] = [:]
+    private(set) var totalByType: [StudyType: TimeInterval] = [:]
+
     // MARK: - Session persistence hook
     /// Called at critical points (pause, background, 4am boundary) so the
     /// StudyStore can write a StudySession record. Set by Russian_TrackerApp.
-    var persistSession: ((Date, TimeInterval) -> Void)?
+    var persistSession: ((Date, TimeInterval, [StudyType: TimeInterval]) -> Void)?
 
     // MARK: - Private
     private var timerStartedAt: Date?
@@ -62,6 +61,32 @@ final class TimerManager {
         return totalElapsed + max(0, Date().timeIntervalSince(start))
     }
 
+    /// Seconds credited to `type` today, including the in-flight slice when the
+    /// clock is running *and* currently on that type.
+    func computedDaily(for type: StudyType) -> TimeInterval {
+        _ = tick
+        return (dailyByType[type] ?? 0) + inFlightInterval(for: type)
+    }
+
+    /// Seconds credited to `type` across all time, including the in-flight slice.
+    func computedTotal(for type: StudyType) -> TimeInterval {
+        _ = tick
+        return (totalByType[type] ?? 0) + inFlightInterval(for: type)
+    }
+
+    func currentDayBreakdown() -> [StudyType: TimeInterval] {
+        Dictionary(uniqueKeysWithValues: StudyType.allCases.map { ($0, computedDaily(for: $0)) })
+    }
+
+    func allTimeBreakdown() -> [StudyType: TimeInterval] {
+        Dictionary(uniqueKeysWithValues: StudyType.allCases.map { ($0, computedTotal(for: $0)) })
+    }
+
+    private func inFlightInterval(for type: StudyType) -> TimeInterval {
+        guard isRunning, mode == type, let start = timerStartedAt else { return 0 }
+        return max(0, Date().timeIntervalSince(start))
+    }
+
     // MARK: - Lifecycle
 
     /// Call on app background/inactive while timer is running.
@@ -70,15 +95,15 @@ final class TimerManager {
     func onBackground() {
         guard isRunning else { return }
         let now = Date()
-        let snapshotDaily = computedDaily
-        let snapshotTotal = computedTotal
+        let interval = timerStartedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0
         // Advance the stored base values to the current moment
-        dailyElapsed = snapshotDaily
-        totalElapsed = snapshotTotal
+        dailyElapsed += interval
+        totalElapsed += interval
+        credit(interval, to: mode)
         // Move the reference point forward so rehydrate sees no elapsed gap
         timerStartedAt = now
-        suite.set(snapshotDaily, forKey: TimerKey.dailyElapsed)
-        suite.set(snapshotTotal, forKey: TimerKey.totalElapsed)
+        suite.set(dailyElapsed, forKey: TimerKey.dailyElapsed)
+        suite.set(totalElapsed, forKey: TimerKey.totalElapsed)
         suite.set(now, forKey: TimerKey.timerStartedAt)
         persistCurrentDaySession()
     }
@@ -164,6 +189,7 @@ final class TimerManager {
         let interval = timerStartedAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
         dailyElapsed += interval
         totalElapsed += interval
+        credit(interval, to: mode)
         timerStartedAt = nil
         isRunning = false
         stopDisplayTimer()
@@ -180,6 +206,47 @@ final class TimerManager {
         isRunning ? pause() : start()
     }
 
+    /// Switch the active study type, splitting a running session at this moment:
+    /// everything up to now is credited to the outgoing type, everything after
+    /// to the incoming one. The clock itself never stops.
+    ///
+    /// The in-flight slice is baked into the stored bases and the reference
+    /// point re-anchored to now — the same manoeuvre `onBackground()` performs.
+    /// That is what keeps the displayed total continuous across the switch:
+    /// stored base plus live interval is unchanged at the instant of the swap,
+    /// so the digits never jump. A jump here would read as lost time.
+    func setMode(_ newMode: StudyType) {
+        guard newMode != mode else { return }
+        if isRunning, let start = timerStartedAt {
+            let now = Date()
+            let interval = max(0, now.timeIntervalSince(start))
+            dailyElapsed += interval
+            totalElapsed += interval
+            credit(interval, to: mode)
+            timerStartedAt = now
+        }
+        mode = newMode
+        suite.studyMode = newMode
+        persistState()
+        persistCurrentDaySession()
+        #if os(iOS)
+        updateLiveActivityInPlace()
+        #endif
+    }
+
+    /// Add `interval` to a type's daily and all-time buckets, in memory and in
+    /// the shared suite. Called from every path where the aggregate elapsed
+    /// values accrue, so the buckets can never drift from the totals.
+    private func credit(_ interval: TimeInterval, to type: StudyType) {
+        guard interval > 0 else { return }
+        let newDaily = (dailyByType[type] ?? 0) + interval
+        let newTotal = (totalByType[type] ?? 0) + interval
+        dailyByType[type] = newDaily
+        totalByType[type] = newTotal
+        suite.set(newDaily, forKey: TimerKey.daily(type))
+        suite.set(newTotal, forKey: TimerKey.total(type))
+    }
+
     // MARK: - Resets
 
     func resetDaily() {
@@ -187,6 +254,7 @@ final class TimerManager {
         if wasRunning { pause() }
         dailyElapsed = 0
         suite.set(0.0, forKey: TimerKey.dailyElapsed)
+        zeroBuckets(daily: true, total: false)
         #if os(iOS)
         endLiveActivity()
         #endif
@@ -200,6 +268,7 @@ final class TimerManager {
         totalElapsed = 0
         suite.set(0.0, forKey: TimerKey.dailyElapsed)
         suite.set(0.0, forKey: TimerKey.totalElapsed)
+        zeroBuckets(daily: true, total: true)
         #if os(iOS)
         endLiveActivity()
         #endif
@@ -235,6 +304,24 @@ final class TimerManager {
         totalElapsed = suite.double(forKey: TimerKey.totalElapsed)
         isRunning = suite.bool(forKey: TimerKey.timerRunning)
         timerStartedAt = suite.object(forKey: TimerKey.timerStartedAt) as? Date
+        mode = suite.studyMode
+        for type in StudyType.allCases {
+            dailyByType[type] = suite.double(forKey: TimerKey.daily(type))
+            totalByType[type] = suite.double(forKey: TimerKey.total(type))
+        }
+    }
+
+    private func zeroBuckets(daily: Bool, total: Bool) {
+        for type in StudyType.allCases {
+            if daily {
+                dailyByType[type] = 0
+                suite.set(0.0, forKey: TimerKey.daily(type))
+            }
+            if total {
+                totalByType[type] = 0
+                suite.set(0.0, forKey: TimerKey.total(type))
+            }
+        }
     }
 
     /// Calendar date (startOfDay) that the current `dailyElapsed` should be
@@ -260,7 +347,7 @@ final class TimerManager {
     private func persistCurrentDaySession() {
         let duration = computedDaily
         guard duration > 0 else { return }
-        persistSession?(currentStudyDayDate(), duration)
+        persistSession?(currentStudyDayDate(), duration, currentDayBreakdown())
     }
 
     private func persistState() {
@@ -314,6 +401,22 @@ final class TimerManager {
         let savedTotal = suite.double(forKey: TimerKey.totalElapsed)
         let newTotal = savedTotal - postBoundaryInTotal + preBoundaryElapsed
 
+        // The same correction applies to the per-type buckets, but only to the
+        // type that was running: an in-flight run belongs entirely to one type,
+        // so no other bucket straddles the boundary.
+        let runningMode = suite.studyMode
+        var departingBreakdown: [StudyType: TimeInterval] = [:]
+        var newTotalByType: [StudyType: TimeInterval] = [:]
+        for type in StudyType.allCases {
+            let savedTypeDaily = suite.double(forKey: TimerKey.daily(type))
+            let savedTypeTotal = suite.double(forKey: TimerKey.total(type))
+            let isRunningType = (type == runningMode)
+            departingBreakdown[type] = savedTypeDaily + (isRunningType ? preBoundaryElapsed : 0)
+            newTotalByType[type] = isRunningType
+                ? max(0, savedTypeTotal - postBoundaryInTotal + preBoundaryElapsed)
+                : savedTypeTotal
+        }
+
         // Persist the departing day's session before zeroing. `dailyElapsed` in
         // UserDefaults represents accumulated study for the day that *started*
         // at lastReset's 4am anchor; add the pre-boundary in-flight slice if
@@ -322,12 +425,20 @@ final class TimerManager {
         let endedDayDuration = savedDaily + preBoundaryElapsed
         if endedDayDuration > 0, lastReset > .distantPast {
             let endedDay = calendar.startOfDay(for: lastReset)
-            persistSession?(endedDay, endedDayDuration)
+            persistSession?(endedDay, endedDayDuration, departingBreakdown)
         }
 
         suite.set(0.0, forKey: TimerKey.dailyElapsed)
         suite.set(newTotal, forKey: TimerKey.totalElapsed)
         suite.set(now, forKey: TimerKey.lastResetDate)
+
+        // New day: daily buckets start empty, corrected all-time buckets carry over.
+        for type in StudyType.allCases {
+            dailyByType[type] = 0
+            totalByType[type] = newTotalByType[type] ?? 0
+            suite.set(0.0, forKey: TimerKey.daily(type))
+            suite.set(newTotalByType[type] ?? 0, forKey: TimerKey.total(type))
+        }
 
         dailyElapsed = 0
         totalElapsed = newTotal
@@ -365,7 +476,8 @@ final class TimerManager {
             dailyElapsed: dailyElapsed,
             isRunning: isRunning,
             timerStartedAt: timerStartedAt,
-            dailyGoal: currentDailyGoal
+            dailyGoal: currentDailyGoal,
+            mode: mode
         )
     }
 
@@ -422,7 +534,11 @@ final class TimerManager {
     /// would orphan the widget on a daily/total reset.
     private func endLiveActivity() {
         let finalState = RussianTimerAttributes.ContentState(
-            dailyElapsed: 0, isRunning: false, timerStartedAt: nil, dailyGoal: currentDailyGoal
+            dailyElapsed: 0,
+            isRunning: false,
+            timerStartedAt: nil,
+            dailyGoal: currentDailyGoal,
+            mode: mode
         )
         let content = ActivityContent(state: finalState, staleDate: .now)
         let activities = Activity<RussianTimerAttributes>.activities

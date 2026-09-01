@@ -104,10 +104,16 @@ struct TimerView: View {
             .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: timer.isRunning)
             .padding(.top, 60)
 
+            // Study type switch — unlabeled by design; switching mid-session
+            // splits the running session rather than interrupting it.
+            StudyTypeDots(selected: timer.mode) { timer.setMode($0) }
+                .sensoryFeedback(.selection, trigger: timer.mode)
+                .padding(.top, 16)
+
             // State label
             Text(timer.isRunning ? "Studying" : "Tap to begin")
                 .eyebrowStyle()
-                .padding(.top, 22)
+                .padding(.top, 12)
 
             Spacer()
             Spacer()

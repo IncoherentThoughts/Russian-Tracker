@@ -94,6 +94,42 @@ private struct WidgetPlayPauseButton: View {
     }
 }
 
+// MARK: - Widget Study Type Dots
+
+/// The three study types as tappable dots.
+///
+/// Live Activities only accept `Button(intent:)` and `Toggle(intent:)` — no
+/// `Menu`, no `Picker` — so this is three buttons rather than a picker control.
+/// Unlabeled, matching the app's Timer screen; the names live on the Stats screen.
+private struct WidgetStudyTypeDots: View {
+    let selected: StudyType
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ForEach(StudyType.allCases) { type in
+                Button(intent: SetStudyModeIntent(mode: type)) {
+                    ZStack {
+                        // Laid out whether or not it's shown, so the row
+                        // doesn't shift as the selection moves.
+                        Circle()
+                            .strokeBorder(type.color.opacity(0.5), lineWidth: 1.2)
+                            .frame(width: 16, height: 16)
+                            .opacity(selected == type ? 1 : 0)
+                        Circle()
+                            .fill(type.color)
+                            .frame(width: 8, height: 8)
+                            .opacity(selected == type ? 1 : 0.35)
+                    }
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(type.displayName)
+            }
+        }
+    }
+}
+
 // MARK: - Timer Digits
 
 /// HH:MM:SS with colons rendered in lightBronze at ultraLight weight.
@@ -305,7 +341,13 @@ struct RussianLockScreenView: View {
                 }
             }
 
-            Spacer().frame(height: 8)
+            Spacer().frame(height: 6)
+
+            // ── Study type dots ───────────────────────────────────────────
+            WidgetStudyTypeDots(selected: context.state.mode)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Spacer().frame(height: 6)
 
             // ── Progress bar ──────────────────────────────────────────────
             GoalProgressBar(
@@ -369,13 +411,16 @@ struct RussianTimerLiveActivity: Widget {
                     .padding(.trailing, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    GoalProgressBar(
-                        isRunning: context.state.isRunning,
-                        dailyElapsed: context.state.dailyElapsed,
-                        dailyGoal: context.state.dailyGoal,
-                        timerStartedAt: context.state.timerStartedAt,
-                        goalHours: goalHours
-                    )
+                    HStack(spacing: 14) {
+                        WidgetStudyTypeDots(selected: context.state.mode)
+                        GoalProgressBar(
+                            isRunning: context.state.isRunning,
+                            dailyElapsed: context.state.dailyElapsed,
+                            dailyGoal: context.state.dailyGoal,
+                            timerStartedAt: context.state.timerStartedAt,
+                            goalHours: goalHours
+                        )
+                    }
                     .padding(.horizontal, 8)
                     .padding(.bottom, 4)
                 }

@@ -60,9 +60,12 @@ struct StatsView: View {
                 }
                 .padding(.bottom, 14)
 
-                // All-time ring
+                // All-time ring, split by study type
                 StatCardContainer(title: "All-time", trailing: "Hours") {
-                    TotalRingChart(totalSeconds: timer.computedTotal)
+                    TotalRingChart(
+                        totalSeconds: timer.computedTotal,
+                        byType: StudyType.allCases.map { ($0, timer.computedTotal(for: $0)) }
+                    )
                 }
             }
             .padding(.horizontal, 22)
@@ -71,16 +74,44 @@ struct StatsView: View {
         }
         .background(Color.eggshell.ignoresSafeArea())
         .onAppear {
-            store.upsertSession(date: Date(), duration: timer.computedDaily)
+            store.upsertSession(
+                date: Date(),
+                duration: timer.computedDaily,
+                breakdown: timer.currentDayBreakdown()
+            )
         }
     }
 
+    /// Today's row is patched from the live timer, because time accrued since
+    /// the last persist hasn't reached SwiftData yet and the charts would
+    /// otherwise lag the running clock.
     private func todayOverridden(
         _ days: [(date: Date, duration: TimeInterval)]
     ) -> [(date: Date, duration: TimeInterval)] {
         let today = Calendar.current.startOfDay(for: Date())
         return days.map { entry in
             entry.date == today ? (entry.date, max(entry.duration, timer.computedDaily)) : entry
+        }
+    }
+
+    /// Same patch for the heatmap, which also needs today's dominant type kept
+    /// current — a session that just switched to immersion should retint today
+    /// without waiting for the next persist.
+    private func todayOverridden(
+        _ days: [(date: Date, duration: TimeInterval, dominantType: StudyType?)]
+    ) -> [(date: Date, duration: TimeInterval, dominantType: StudyType?)] {
+        let today = Calendar.current.startOfDay(for: Date())
+        let liveDominant = timer.currentDayBreakdown()
+            .filter { $0.value > 0 }
+            .max { $0.value < $1.value }?
+            .key
+        return days.map { entry in
+            guard entry.date == today else { return entry }
+            return (
+                entry.date,
+                max(entry.duration, timer.computedDaily),
+                liveDominant ?? entry.dominantType
+            )
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MonthlyHeatmap: View {
-    let data: [(date: Date, duration: TimeInterval)]
+    let data: [(date: Date, duration: TimeInterval, dominantType: StudyType?)]
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
@@ -29,11 +29,17 @@ struct MonthlyHeatmap: View {
                     Color.clear.aspectRatio(1, contentMode: .fit)
                 }
                 ForEach(data, id: \.date) { entry in
-                    HeatmapCell(date: entry.date, duration: entry.duration)
+                    HeatmapCell(
+                        date: entry.date,
+                        duration: entry.duration,
+                        dominantType: entry.dominantType
+                    )
                 }
             }
 
-            // Legend
+            // Legend — intensity only. Which color means which study type is
+            // explained once, on the all-time ring below; repeating it here
+            // would put two legends in competition on one screen.
             HStack(spacing: 6) {
                 Spacer()
                 Text("Less").eyebrowStyle()
@@ -52,6 +58,10 @@ struct MonthlyHeatmap: View {
 struct HeatmapCell: View {
     let date: Date
     let duration: TimeInterval
+    /// The study type this day was mostly spent on. Nil for an untyped day —
+    /// one created purely by a manual edit — which falls back to the neutral
+    /// copper ramp rather than claiming a type it doesn't have.
+    var dominantType: StudyType?
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -64,22 +74,31 @@ struct HeatmapCell: View {
         return 3
     }
 
-    static func color(for level: Int) -> Color {
+    /// Hue answers "what kind of study", opacity answers "how much" — the two
+    /// dimensions stay independent so a light immersion day and a heavy one
+    /// read as the same color at different strengths.
+    private var tint: Color { dominantType?.color ?? .rosyCopper }
+
+    private var fill: Color {
+        Self.color(for: intensityLevel, tint: tint)
+    }
+
+    static func color(for level: Int, tint: Color = .rosyCopper) -> Color {
         switch level {
         case 0: return Color.toffeeBrown.opacity(0.06)
-        case 1: return Color.rosyCopper.opacity(0.18)
-        case 2: return Color.rosyCopper.opacity(0.40)
-        default: return Color.rosyCopper.opacity(0.75)
+        case 1: return tint.opacity(0.18)
+        case 2: return tint.opacity(0.40)
+        default: return tint.opacity(0.75)
         }
     }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 6)
-                .fill(Self.color(for: intensityLevel))
+                .fill(fill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(isToday ? Color.rosyCopper : .clear, lineWidth: 1.5)
+                        .stroke(isToday ? tint : .clear, lineWidth: 1.5)
                 )
 
             Text("\(Calendar.current.component(.day, from: date))")
@@ -95,9 +114,10 @@ struct HeatmapCell: View {
     let today = calendar.startOfDay(for: Date())
     let monthInterval = calendar.dateInterval(of: .month, for: today)!
     let days = calendar.dateComponents([.day], from: monthInterval.start, to: monthInterval.end).day ?? 28
-    let data = (0..<days).map { offset -> (date: Date, duration: TimeInterval) in
+    let types: [StudyType?] = [.grammar, .immersion, .output, nil]
+    let data = (0..<days).map { offset -> (date: Date, duration: TimeInterval, dominantType: StudyType?) in
         let date = calendar.date(byAdding: .day, value: offset, to: monthInterval.start)!
-        return (date, TimeInterval.random(in: 0...10000))
+        return (date, TimeInterval.random(in: 0...10000), types[offset % types.count])
     }
     return MonthlyHeatmap(data: data)
         .padding()

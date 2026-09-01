@@ -68,3 +68,19 @@ extension Text {
             .foregroundColor(.toffeeInk)
     }
 }
+
+// MARK: - Study type colors
+
+extension StudyType {
+    /// Drawn from the existing palette rather than introducing new hues — these
+    /// colors appear as dots on the Timer screen and Live Activity, as ring
+    /// slices on the Stats screen, and as the heatmap's per-day tint, so they
+    /// have to sit comfortably beside everything already on those screens.
+    var color: Color {
+        switch self {
+        case .grammar:   return .rosyCopper
+        case .immersion: return .skyReflection
+        case .output:    return .toffeeBrown
+        }
+    }
+}

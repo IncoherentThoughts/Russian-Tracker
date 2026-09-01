@@ -25,8 +25,8 @@ struct Russian_TrackerApp: App {
             if case .success(let container) = result {
                 studyStore.modelContext = container.mainContext
                 studyStore.recalibrateTotalIfNeeded(timer: timerManager)
-                timerManager.persistSession = { [weak studyStore] date, duration in
-                    studyStore?.upsertSession(date: date, duration: duration)
+                timerManager.persistSession = { [weak studyStore] date, duration, breakdown in
+                    studyStore?.upsertSession(date: date, duration: duration, breakdown: breakdown)
                 }
             }
         }
