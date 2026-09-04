@@ -105,22 +105,21 @@ private struct WidgetStudyTypeDots: View {
     let selected: StudyType
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 10) {
             ForEach(StudyType.allCases) { type in
                 Button(intent: SetStudyModeIntent(mode: type)) {
                     ZStack {
                         // Laid out whether or not it's shown, so the row
                         // doesn't shift as the selection moves.
                         Circle()
-                            .strokeBorder(type.color.opacity(0.5), lineWidth: 1.2)
-                            .frame(width: 16, height: 16)
+                            .strokeBorder(type.color, lineWidth: 1.5)
+                            .frame(width: 18, height: 18)
                             .opacity(selected == type ? 1 : 0)
                         Circle()
                             .fill(type.color)
-                            .frame(width: 8, height: 8)
-                            .opacity(selected == type ? 1 : 0.35)
+                            .frame(width: 9, height: 9)
                     }
-                    .frame(width: 24, height: 24)
+                    .frame(width: 26, height: 26)
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -293,6 +292,12 @@ struct RussianLockScreenView: View {
 
                 Spacer()
 
+                // Study type dots ride in the header so they add no height —
+                // the Lock Screen presentation is capped and a fourth row
+                // pushed the play/pause button out of the frame.
+                WidgetStudyTypeDots(selected: context.state.mode)
+                    .padding(.trailing, 6)
+
                 WidgetPlayPauseButton(isRunning: context.state.isRunning)
                     .offset(y: 4)
             }
@@ -341,13 +346,7 @@ struct RussianLockScreenView: View {
                 }
             }
 
-            Spacer().frame(height: 6)
-
-            // ── Study type dots ───────────────────────────────────────────
-            WidgetStudyTypeDots(selected: context.state.mode)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 8)
 
             // ── Progress bar ──────────────────────────────────────────────
             GoalProgressBar(

@@ -35,6 +35,7 @@ extension Color {
     static let eggshell      = Color(hex: "#F8F2DC")  // app background
     static let eggshellDeep  = Color(hex: "#F3EACD")  // card background — warm parchment
     static let skyReflection = Color(hex: "#81ADC8")  // achievement callouts (Best Day)
+    static let skyDeep       = Color(hex: "#4F87A9")  // saturated sky — study-type dot/slice, holds up on parchment
 
     static let hairline       = Color.toffeeBrown.opacity(0.15)
     static let hairlineStrong = Color.toffeeBrown.opacity(0.25)
@@ -72,15 +73,17 @@ extension Text {
 // MARK: - Study type colors
 
 extension StudyType {
-    /// Drawn from the existing palette rather than introducing new hues — these
-    /// colors appear as dots on the Timer screen and Live Activity, as ring
-    /// slices on the Stats screen, and as the heatmap's per-day tint, so they
-    /// have to sit comfortably beside everything already on those screens.
+    /// These colors appear as 12pt dots on the Timer screen and Live Activity,
+    /// as ring slices on the Stats screen, and as the heatmap's per-day tint.
+    /// At dot size the palette's softer tones (skyReflection, toffeeBrown)
+    /// washed out against parchment, so each type uses the deepest member of
+    /// its hue family — the same warm/cool relationships, just enough contrast
+    /// to be read at a glance.
     var color: Color {
         switch self {
         case .grammar:   return .rosyCopper
-        case .immersion: return .skyReflection
-        case .output:    return .toffeeBrown
+        case .immersion: return .skyDeep
+        case .output:    return .toffeeInk
         }
     }
 }
