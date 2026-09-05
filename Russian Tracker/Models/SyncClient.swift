@@ -171,24 +171,25 @@ final class SyncClient {
         #endif
     }
 
-    /// App came to the foreground (iOS) or launched (both).
+    /// App came to the foreground (iOS) or launched (both). Pull, and make
+    /// sure the Realtime channel is joined; the SDK reconnects a dropped
+    /// socket on its own, but a channel that ended up unsubscribed while the
+    /// app was suspended is re-created here.
     func resume() {
         active = true
         guard userID != nil else { return }
-        Task { await pull() }
-        subscribe()
+        Task {
+            await ensureSubscribed()
+            await pull()
+        }
         startPeriodicPull()
     }
 
-    /// App went to the background (iOS). The Mac app never suspends.
+    /// App went to the background (iOS). Flush what is pending; the channel
+    /// stays registered so the SDK re-joins it when the socket comes back.
     func suspend() {
         active = false
         Task { await flush() }
-        #if os(iOS)
-        unsubscribe()
-        periodicTask?.cancel()
-        periodicTask = nil
-        #endif
     }
 
     private func activate(_ session: Session) async {
@@ -407,8 +408,19 @@ final class SyncClient {
 
     // MARK: Realtime
 
-    private func subscribe() {
-        guard channel == nil, let uid = userID else { return }
+    /// Join the Account's channel if none exists, or replace one that is no
+    /// longer subscribed. Waits for the old channel to leave first so the
+    /// server never sees two joins on the same topic.
+    private func ensureSubscribed() async {
+        if let ch = channel {
+            switch ch.status {
+            case .subscribed, .subscribing:
+                return
+            default:
+                await teardownChannel()
+            }
+        }
+        guard let uid = userID else { return }
         let ch = client.channel("sync-\(uid)")
         let clockChanges = ch.postgresChange(AnyAction.self, schema: "public", table: "clock_state")
         let sessionChanges = ch.postgresChange(AnyAction.self, schema: "public", table: "sessions")
@@ -426,19 +438,25 @@ final class SyncClient {
                     self?.handleSessionChange(change)
                 }
             },
-            Task {
-                await ch.subscribe()
-            },
         ]
+        await ch.subscribe()
+    }
+
+    private func subscribe() {
+        Task { await ensureSubscribed() }
     }
 
     private func unsubscribe() {
+        Task { await teardownChannel() }
+    }
+
+    private func teardownChannel() async {
         for task in listenTasks { task.cancel() }
         listenTasks = []
-        if let ch = channel {
-            channel = nil
-            Task { await ch.unsubscribe() }
-        }
+        guard let ch = channel else { return }
+        channel = nil
+        await ch.unsubscribe()
+        await client.removeChannel(ch)
     }
 
     private func handleClockChange(_ change: AnyAction) {

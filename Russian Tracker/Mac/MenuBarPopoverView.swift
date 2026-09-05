@@ -13,7 +13,7 @@ struct MenuBarLabel: View {
     var body: some View {
         if timer.isRunning {
             Label {
-                Text(timer.computedDaily.timerFormatted)
+                Text(timer.computedDaily.menuBarFormatted)
                     .monospacedDigit()
             } icon: {
                 Image(systemName: "book.fill")

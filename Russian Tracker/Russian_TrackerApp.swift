@@ -55,9 +55,11 @@ struct Russian_TrackerApp: App {
         case .active:
             services.timer.onForeground()
             services.sync.resume()
-        case .background, .inactive:
+        case .background:
             services.timer.onBackground()
             services.sync.suspend()
+        case .inactive:
+            services.timer.onBackground()
         @unknown default:
             break
         }
