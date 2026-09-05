@@ -11,7 +11,7 @@ The domain layer was built transport-agnostic: `ClockSnapshot`, `merged(local:re
 ## Decision
 
 - Transport is a Supabase project (Postgres + Realtime + Auth), free tier: `https://wnwquybkpmyaufwkjmqw.supabase.co`.
-- Identity is an Account: an email address, signed in once per device with a one-time code. The SDK keeps the refresh token in the Keychain and renews silently, so sign-in is a setup step, not a habit.
+- Identity is an Account: an email address and password, signed in once per device. Email confirmation is off on the project (editing the code email template requires custom SMTP, which is not worth it for one user). The SDK keeps the refresh token in the Keychain and renews silently, so sign-in is a setup step, not a habit.
 - Two tables, both under row-level security keyed to the signed-in user and both in the Realtime publication:
   - `clock_state`: one row per Account, the Clock State columns plus `last_action_at` / `last_action_device`.
   - `sessions`: primary key (`user_id`, `date`), the Session columns plus `updated_at`. Sessions are identified by Study Day, matching the glossary; there is no separate id.

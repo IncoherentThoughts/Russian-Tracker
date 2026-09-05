@@ -44,7 +44,7 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 - App Shortcuts for Siri and the Shortcuts app: Start, Pause, Toggle, Set Study Type
 
 ### Cross-device sync
-- One shared Clock per Account (an email, signed in once per device with a one-time code) over Supabase
+- One shared Clock per Account (an email and password, signed in once per device) over Supabase
 - Start on one device, pause on another; the later action wins
 - Sessions and the daily goal sync; all-time totals are derived from sessions
 - Works offline and catches up; Settings shows one muted sync status line
@@ -106,7 +106,7 @@ Russian Timer Widget/
 1. Clone the repo and open `Russian Tracker.xcodeproj` in Xcode.
 2. Set your development team in **Signing & Capabilities** for both the `Russian Tracker` and `Russian Timer Widget` targets.
 3. Verify the App Group `group.evan.russiantimer` is configured in **Signing & Capabilities** for both targets.
-4. Sync uses a Supabase project (see `docs/adr/0003-supabase-sync-transport.md`). One-time setup: run `docs/supabase/001_sync.sql` in the project's SQL editor, and in Authentication → Email Templates edit the **Magic Link** template so it contains `{{ .Token }}` (the six-digit code). The project URL and publishable key live in `Russian Tracker/Models/SupabaseConfig.swift`.
+4. Sync uses a Supabase project (see `docs/adr/0003-supabase-sync-transport.md`). One-time setup: run `docs/supabase/001_sync.sql` in the project's SQL editor, and under Authentication → Providers → Email turn **Confirm email** off (sign-in is email + password, once per device). The project URL and publishable key live in `Russian Tracker/Models/SupabaseConfig.swift`.
 5. Build and run on a physical device (iOS 17.6+) or on the Mac (macOS 15+). The Live Activity cannot be tested in Simulator.
 
 > `NSSupportsLiveActivities` is already set to `YES` in the main app's `Info.plist`.

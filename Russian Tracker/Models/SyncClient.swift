@@ -84,7 +84,6 @@ nonisolated struct SessionRow: Codable, Equatable {
 final class SyncClient {
     enum Step: Equatable {
         case signedOut
-        case codeSent(email: String)
         case signedIn(email: String)
     }
 
@@ -129,8 +128,6 @@ final class SyncClient {
         switch step {
         case .signedOut:
             return "Not signed in"
-        case .codeSent:
-            return "Check your email for a code"
         case .signedIn:
             if let lastError { return lastError }
             guard let at = lastSyncAt else { return "Waiting for first sync" }
@@ -215,49 +212,50 @@ final class SyncClient {
         periodicTask = nil
         retryTask?.cancel()
         retryTask = nil
-        if case .codeSent = step {} else { step = .signedOut }
+        step = .signedOut
     }
 
     // MARK: Auth
 
-    func sendCode(to rawEmail: String) async {
+    /// Email + password, once per device. Signing in with an address that
+    /// has no Account yet creates it; "Confirm email" is off on the project,
+    /// so no email is sent and the session starts immediately.
+    func signIn(email rawEmail: String, password: String) async {
         let email = rawEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard email.contains("@") else {
             lastError = "Enter an email address"
             return
         }
-        busy = true
-        defer { busy = false }
-        do {
-            try await client.auth.signInWithOTP(email: email, shouldCreateUser: true)
-            step = .codeSent(email: email)
-            lastError = nil
-        } catch {
-            lastError = Self.describe(error)
-        }
-    }
-
-    func verify(code rawCode: String) async {
-        guard case .codeSent(let email) = step else { return }
-        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else {
-            lastError = "Enter the code from the email"
+        guard password.count >= 6 else {
+            lastError = "Password needs at least 6 characters"
             return
         }
         busy = true
         defer { busy = false }
         do {
-            try await client.auth.verifyOTP(email: email, token: code, type: .email)
+            try await client.auth.signIn(email: email, password: password)
             lastError = nil
-            // `authStateChanges` delivers `.signedIn` and activates.
         } catch {
-            lastError = Self.describe(error)
+            // No such Account yet: create it with these credentials.
+            do {
+                let result = try await client.auth.signUp(email: email, password: password)
+                if result.session == nil {
+                    lastError = "Account created; confirm the email, then sign in"
+                } else {
+                    lastError = nil
+                }
+            } catch let signUpError {
+                lastError = Self.describe(Self.prefer(error, over: signUpError))
+            }
         }
+        // `authStateChanges` delivers `.signedIn` and activates.
     }
 
-    func cancelCode() {
-        step = .signedOut
-        lastError = nil
+    /// When both sign-in and sign-up fail, the sign-in error is the useful
+    /// one for an existing Account (wrong password); otherwise the sign-up's.
+    private static func prefer(_ signIn: Error, over signUp: Error) -> Error {
+        let text = signUp.localizedDescription.lowercased()
+        return text.contains("already") ? signIn : signUp
     }
 
     func signOut() async {
@@ -267,7 +265,6 @@ final class SyncClient {
         try? await client.auth.signOut()
         suite.removeObject(forKey: TimerKey.syncUploadedFor)
         deactivate()
-        step = .signedOut
         lastError = nil
     }
 

@@ -1,12 +1,12 @@
 import SwiftUI
 
 /// The Account group in Settings (ADR 0003): sign in once with an email and
-/// a one-time code, then it just shows who is signed in and a way out.
+/// password, then it just shows who is signed in and a way out.
 struct SyncSection: View {
     @Environment(SyncClient.self) private var sync
 
     @State private var email = ""
-    @State private var code = ""
+    @State private var password = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -14,8 +14,6 @@ struct SyncSection: View {
                 switch sync.step {
                 case .signedOut:
                     signedOutRows
-                case .codeSent(let address):
-                    codeRows(address)
                 case .signedIn(let address):
                     signedInRows(address)
                 }
@@ -34,41 +32,18 @@ struct SyncSection: View {
     @ViewBuilder
     private var signedOutRows: some View {
         inputRow(icon: "envelope", label: "Email") {
-            field("you@example.com", text: $email, isEmail: true)
+            field("you@example.com", text: $email, kind: .email)
+        }
+        SettingsDivider()
+        inputRow(icon: "key", label: "Password") {
+            field("••••••••", text: $password, kind: .password)
         }
         SettingsDivider()
         SettingsRow(
-            icon: "paperplane",
-            label: sync.busy ? "Sending…" : "Send sign-in code",
+            icon: "person.crop.circle.badge.checkmark",
+            label: sync.busy ? "Signing in…" : "Sign in",
             chevron: true,
-            action: { Task { await sync.sendCode(to: email) } }
-        )
-    }
-
-    @ViewBuilder
-    private func codeRows(_ address: String) -> some View {
-        SettingsRow(icon: "envelope", label: "Email") {
-            Text(address)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundColor(.bronzeMuted)
-                .lineLimit(1)
-        }
-        SettingsDivider()
-        inputRow(icon: "number", label: "Code") {
-            field("123456", text: $code, isEmail: false)
-        }
-        SettingsDivider()
-        SettingsRow(
-            icon: "checkmark.circle",
-            label: sync.busy ? "Verifying…" : "Verify",
-            chevron: true,
-            action: { Task { await sync.verify(code: code) } }
-        )
-        SettingsDivider()
-        SettingsRow(
-            icon: "arrow.uturn.backward",
-            label: "Use a different email",
-            action: { code = ""; sync.cancelCode() }
+            action: { Task { await sync.signIn(email: email, password: password); password = "" } }
         )
     }
 
@@ -110,17 +85,26 @@ struct SyncSection: View {
         .padding(.vertical, 14)
     }
 
-    private func field(_ placeholder: String, text: Binding<String>, isEmail: Bool) -> some View {
-        TextField(placeholder, text: text)
+    private enum FieldKind { case email, password }
+
+    @ViewBuilder
+    private func field(_ placeholder: String, text: Binding<String>, kind: FieldKind) -> some View {
+        Group {
+            if kind == .password {
+                SecureField(placeholder, text: text)
+            } else {
+                TextField(placeholder, text: text)
+            }
+        }
             .textFieldStyle(.plain)
             .multilineTextAlignment(.trailing)
             .font(.system(size: 14, weight: .regular, design: .monospaced))
             .foregroundColor(.toffeeInk)
             .autocorrectionDisabled()
             #if os(iOS)
-            .keyboardType(isEmail ? .emailAddress : .numberPad)
+            .keyboardType(kind == .email ? .emailAddress : .default)
             .textInputAutocapitalization(.never)
-            .textContentType(isEmail ? .emailAddress : .oneTimeCode)
+            .textContentType(kind == .email ? .emailAddress : .password)
             #endif
             .frame(maxWidth: 200)
     }
