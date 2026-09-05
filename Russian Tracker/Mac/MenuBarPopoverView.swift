@@ -4,8 +4,10 @@ import SwiftUI
 
 // MARK: - Menu Bar Item label
 
-/// The status-bar label: the app glyph, plus today's ticking elapsed time
-/// only while the Clock is running. Driven by `TimerManager.tick` through
+/// The status-bar label: the app icon as a monochrome template glyph
+/// (`MenuBarIcon` in the asset catalog, so it takes the menu bar's tint and
+/// inverts with the appearance), plus today's ticking elapsed time only
+/// while the Clock is running. Driven by `TimerManager.tick` through
 /// `computedDaily`, so it advances once a second without any timer of its own.
 struct MenuBarLabel: View {
     @Environment(TimerManager.self) private var timer
@@ -16,11 +18,11 @@ struct MenuBarLabel: View {
                 Text(timer.computedDaily.menuBarFormatted)
                     .monospacedDigit()
             } icon: {
-                Image(systemName: "book.fill")
+                Image("MenuBarIcon")
             }
             .labelStyle(.titleAndIcon)
         } else {
-            Image(systemName: "book.fill")
+            Image("MenuBarIcon")
         }
     }
 }
