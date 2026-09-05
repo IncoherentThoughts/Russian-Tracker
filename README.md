@@ -106,7 +106,7 @@ Russian Timer Widget/
 1. Clone the repo and open `Russian Tracker.xcodeproj` in Xcode.
 2. Set your development team in **Signing & Capabilities** for both the `Russian Tracker` and `Russian Timer Widget` targets.
 3. Verify the App Group `group.evan.russiantimer` is configured in **Signing & Capabilities** for both targets.
-4. Enable the **iCloud → CloudKit** capability with container `iCloud.com.evan.russiantracker` on both targets (needs the paid Apple Developer Program; without it the app silently runs local-only).
+4. Sync is off by default because personal (free) developer teams cannot sign iCloud or push. To turn it on once the paid Apple Developer Program is active, set the build setting `RT_CLOUDKIT` to `YES` on the `Russian Tracker` target. That selects the entitlements files with iCloud (container `iCloud.com.evan.russiantracker`) and push, and defines `CLOUDKIT_SYNC`. With `NO` the app runs local-only and Settings shows "iCloud · unavailable on this build".
 5. Build and run on a physical device (iOS 17.6+) or on the Mac (macOS 15+). The Live Activity cannot be tested in Simulator.
 
 > `NSSupportsLiveActivities` is already set to `YES` in the main app's `Info.plist`.

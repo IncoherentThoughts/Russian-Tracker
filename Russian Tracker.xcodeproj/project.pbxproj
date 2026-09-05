@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		KS0000000000000000000001 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = KS0000000000000000000002 /* KeyboardShortcuts */; };
-		FA284E212F54EE7D00726B60 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA284E202F54EE7D00726B60 /* ActivityKit.framework */; platformFilters = (ios, ); settings = {ATTRIBUTES = (Weak, ); }; };
+		FA284E212F54EE7D00726B60 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA284E202F54EE7D00726B60 /* ActivityKit.framework */; platformFilter = ios; settings = {ATTRIBUTES = (Weak, ); }; };
 		FA73112A2F52A42600E4A16C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA7311292F52A42600E4A16C /* WidgetKit.framework */; };
 		FA73112C2F52A42600E4A16C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA73112B2F52A42600E4A16C /* SwiftUI.framework */; };
 		FA7311392F52A42700E4A16C /* Russian Timer WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FA7311272F52A42600E4A16C /* Russian Timer WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		KS0000000000000000000001 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = KS0000000000000000000002 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,8 +71,8 @@
 				Models/ClockSnapshot.swift,
 				Models/RussianTimerAttributes.swift,
 				Models/ToggleTimerIntent.swift,
-				Views/Shared/SharedWidgetViews.swift,
 				Theme.swift,
+				Views/Shared/SharedWidgetViews.swift,
 			);
 			target = FA7311262F52A42600E4A16C /* Russian Timer WidgetExtension */;
 		};
@@ -617,8 +617,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Russian Tracker/Russian Tracker.entitlements";
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Russian Tracker/Russian Tracker.macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "$(RT_ENTITLEMENTS_$(RT_CLOUDKIT))";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "$(RT_MAC_ENTITLEMENTS_$(RT_CLOUDKIT))";
+				RT_CLOUDKIT = NO;
+				RT_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.entitlements";
+				RT_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.entitlements";
+				RT_MAC_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.macOS.entitlements";
+				RT_MAC_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.macOS.entitlements";
+				RT_SWIFT_NO = "";
+				RT_SWIFT_YES = CLOUDKIT_SYNC;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(RT_SWIFT_$(RT_CLOUDKIT))";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -665,8 +673,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "Russian Tracker/Russian Tracker.entitlements";
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Russian Tracker/Russian Tracker.macOS.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "$(RT_ENTITLEMENTS_$(RT_CLOUDKIT))";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "$(RT_MAC_ENTITLEMENTS_$(RT_CLOUDKIT))";
+				RT_CLOUDKIT = NO;
+				RT_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.entitlements";
+				RT_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.entitlements";
+				RT_MAC_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.macOS.entitlements";
+				RT_MAC_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.macOS.entitlements";
+				RT_SWIFT_NO = "";
+				RT_SWIFT_YES = CLOUDKIT_SYNC;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(RT_SWIFT_$(RT_CLOUDKIT))";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -804,25 +820,6 @@
 		};
 /* End XCBuildConfiguration section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		KS0000000000000000000002 /* KeyboardShortcuts */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
-			productName = KeyboardShortcuts;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCConfigurationList section */
 		FA73113B2F52A42700E4A16C /* Build configuration list for PBXNativeTarget "Russian Timer WidgetExtension" */ = {
 			isa = XCConfigurationList;
@@ -870,6 +867,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		KS0000000000000000000002 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FAA686D32F52427900481D93 /* Project object */;
 }

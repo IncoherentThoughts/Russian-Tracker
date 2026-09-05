@@ -27,7 +27,7 @@ Date: 2026-09-05. Vocabulary: see `CONTEXT.md`. Decisions: `docs/adr/0001`, `doc
 
 - Mac-started Clock does not summon the iPhone Live Activity until the phone app opens.
 - A quit Mac app leaves the widget stale until relaunch.
-- iCloud needs the paid developer program; verify in the Apple Developer portal before Phase 2.
+- iCloud needs the paid developer program. The project team (3LYN963K9A) is a personal team, so `RT_CLOUDKIT = NO` selects local-only entitlements until enrolment; flip it to YES afterwards.
 
 ## Current state of the code (facts)
 

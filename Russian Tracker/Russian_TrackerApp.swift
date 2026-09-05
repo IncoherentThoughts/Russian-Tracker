@@ -189,10 +189,16 @@ final class AppServices {
         store.startObservingRemoteChanges()
     }
 
-    /// Whether this process was signed with the iCloud entitlement. Unsigned
-    /// command-line builds and test hosts are not; Xcode-run builds are.
+    /// Whether this build carries the iCloud entitlement. Controlled by the
+    /// `RT_CLOUDKIT` build setting (YES selects the `.entitlements` files with
+    /// iCloud + push and defines `CLOUDKIT_SYNC`; NO selects the `.local`
+    /// variants). Personal developer teams cannot sign iCloud, so NO is the
+    /// default until the paid program is active. On macOS the signed
+    /// entitlement is double-checked because CloudKit traps without it.
     static var hasICloudEntitlement: Bool {
-        #if os(macOS)
+        #if !CLOUDKIT_SYNC
+        return false
+        #elseif os(macOS)
         guard let task = SecTaskCreateFromSelf(nil) else { return false }
         let value = SecTaskCopyValueForEntitlement(
             task, "com.apple.developer.icloud-services" as CFString, nil
