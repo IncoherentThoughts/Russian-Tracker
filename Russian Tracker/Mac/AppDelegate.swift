@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in self?.mainWindowDidClose() }
         }
 
-        // Hotkeys are installed by the integrator (Phase 4).
+        // Global hotkeys are installed in `Russian_TrackerApp.init` (see `Hotkeys`).
     }
 
     /// Closing the last window must never quit a menu bar agent.

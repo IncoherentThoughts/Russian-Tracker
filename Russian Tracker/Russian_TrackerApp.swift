@@ -28,6 +28,7 @@ struct Russian_TrackerApp: App {
         _services = State(initialValue: services)
         #if os(macOS)
         _rollover = State(initialValue: MacRolloverScheduler(timer: services.timer))
+        Hotkeys.install(timer: services.timer)
         #endif
     }
 
