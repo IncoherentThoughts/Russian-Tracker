@@ -4,32 +4,44 @@ import Observation
 import ActivityKit
 #endif
 
+/// Owns the in-memory Clock State and performs every Clock Action.
+///
+/// The state itself is a `ClockSnapshot`. After each action the manager
+/// writes it to the app-group suite (for intents and widgets), persists
+/// today's Session, and hands the snapshot to `onStateChanged` so the app can
+/// mirror it into the synced `ClockState` record.
+///
+/// All-time figures are derived (ADR 0002): `pastTotal` is the cached sum of
+/// every Session before the current Study Day, refreshed by `StudyStore`.
 @Observable
 final class TimerManager {
     // MARK: - Observed state (drives UI)
-    private(set) var dailyElapsed: TimeInterval = 0
-    private(set) var totalElapsed: TimeInterval = 0
-    private(set) var isRunning: Bool = false
+    private(set) var snapshot: ClockSnapshot
     private(set) var tick: Int = 0
+    private(set) var pastTotal: TimeInterval = 0
+    private(set) var pastByType: [StudyType: TimeInterval] = [:]
 
-    /// The study type the clock is currently crediting. The timer itself is
-    /// unaffected by this — it always counts total time for the day.
-    private(set) var mode: StudyType = .grammar
+    var isRunning: Bool { snapshot.isRunning }
+    var mode: StudyType { snapshot.mode }
+    var studyDay: Date { snapshot.studyDay }
+    var dailyGoal: TimeInterval { snapshot.dailyGoal }
 
-    /// Seconds credited to each type, for today and for all time. These are the
-    /// stored bases; add the in-flight slice via `computedDaily(for:)`.
-    private(set) var dailyByType: [StudyType: TimeInterval] = [:]
-    private(set) var totalByType: [StudyType: TimeInterval] = [:]
+    // MARK: - Hooks (set by Russian_TrackerApp once the store exists)
 
-    // MARK: - Session persistence hook
-    /// Called at critical points (pause, background, 4am boundary) so the
-    /// StudyStore can write a StudySession record. Set by Russian_TrackerApp.
-    var persistSession: ((Date, TimeInterval, [StudyType: TimeInterval]) -> Void)?
+    /// Writes a Session for a Study Day. Departing days are queued in the suite
+    /// until this is set, then drained.
+    var persistSession: ((Date, TimeInterval, [StudyType: TimeInterval]) -> Void)? {
+        didSet { drainPendingSessions() }
+    }
+
+    /// Called after every Clock Action with the new state. The app mirrors it
+    /// into the synced record and refreshes widgets.
+    var onStateChanged: ((ClockSnapshot) -> Void)?
 
     // MARK: - Private
-    private var timerStartedAt: Date?
     private var displayTimer: Timer?
     private let suite: UserDefaults
+    private let deviceID: String
     #if os(iOS)
     private var liveActivity: Activity<RussianTimerAttributes>?
     #endif
@@ -37,7 +49,15 @@ final class TimerManager {
     // MARK: - Init
     init() {
         suite = UserDefaults(suiteName: appGroupSuite) ?? .standard
-        rehydrate()
+        deviceID = ClockSnapshot.deviceID(in: suite)
+        snapshot = ClockSnapshot(suite: suite)
+        pastTotal = suite.double(forKey: TimerKey.pastTotal)
+        for type in StudyType.allCases {
+            pastByType[type] = suite.double(forKey: TimerKey.pastTotal(type))
+        }
+        performRolloverIfNeeded()
+        snapshot.write(to: suite)
+        if snapshot.isRunning { startDisplayTimer() }
         registerForStateChanges()
     }
 
@@ -48,79 +68,48 @@ final class TimerManager {
         )
     }
 
-    // MARK: - Computed display values (add live interval if running)
+    // MARK: - Computed display values
+
     var computedDaily: TimeInterval {
         _ = tick
-        guard isRunning, let start = timerStartedAt else { return dailyElapsed }
-        return dailyElapsed + max(0, Date().timeIntervalSince(start))
+        return snapshot.daily(at: Date())
     }
 
     var computedTotal: TimeInterval {
-        _ = tick
-        guard isRunning, let start = timerStartedAt else { return totalElapsed }
-        return totalElapsed + max(0, Date().timeIntervalSince(start))
+        pastTotal + computedDaily
     }
 
-    /// Seconds credited to `type` today, including the in-flight slice when the
-    /// clock is running *and* currently on that type.
     func computedDaily(for type: StudyType) -> TimeInterval {
         _ = tick
-        return (dailyByType[type] ?? 0) + inFlightInterval(for: type)
+        return snapshot.daily(for: type, at: Date())
     }
 
-    /// Seconds credited to `type` across all time, including the in-flight slice.
     func computedTotal(for type: StudyType) -> TimeInterval {
-        _ = tick
-        return (totalByType[type] ?? 0) + inFlightInterval(for: type)
+        (pastByType[type] ?? 0) + computedDaily(for: type)
     }
 
     func currentDayBreakdown() -> [StudyType: TimeInterval] {
-        Dictionary(uniqueKeysWithValues: StudyType.allCases.map { ($0, computedDaily(for: $0)) })
+        _ = tick
+        return snapshot.breakdown(at: Date())
     }
 
     func allTimeBreakdown() -> [StudyType: TimeInterval] {
         Dictionary(uniqueKeysWithValues: StudyType.allCases.map { ($0, computedTotal(for: $0)) })
     }
 
-    private func inFlightInterval(for type: StudyType) -> TimeInterval {
-        guard isRunning, mode == type, let start = timerStartedAt else { return 0 }
-        return max(0, Date().timeIntervalSince(start))
-    }
-
     // MARK: - Lifecycle
 
-    /// Call on app background/inactive while timer is running.
-    /// Snapshots computed elapsed into UserDefaults and resets the reference
-    /// point to now — prevents double-counting on the next foreground rehydrate.
+    /// Call on app background/inactive. Nothing to bank — displayed time is
+    /// always base plus in-flight — but today's Session should be current.
     func onBackground() {
-        guard isRunning else { return }
-        let now = Date()
-        let interval = timerStartedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0
-        // Advance the stored base values to the current moment
-        dailyElapsed += interval
-        totalElapsed += interval
-        credit(interval, to: mode)
-        // Move the reference point forward so rehydrate sees no elapsed gap
-        timerStartedAt = now
-        suite.set(dailyElapsed, forKey: TimerKey.dailyElapsed)
-        suite.set(totalElapsed, forKey: TimerKey.totalElapsed)
-        suite.set(now, forKey: TimerKey.timerStartedAt)
         persistCurrentDaySession()
     }
 
-    /// Call on every app foreground: check 4am boundary + rehydrate
+    /// Call on every app foreground (and on wake / the 4am timer on macOS):
+    /// adopt anything the intents wrote, roll over if needed, refresh.
     func onForeground() {
-        check4amBoundary()
-        rehydrate()
-        stopDisplayTimer()
-        if isRunning {
-            startDisplayTimer()
-        }
-        persistCurrentDaySession()
+        reconcileFromSharedState()
         #if os(iOS)
-        // Foregrounding is engagement: refresh staleDate via update() if an
-        // active activity exists. Smooth, no flicker. Don't recreate ended
-        // activities — the user's already in the app.
         if let active = Activity<RussianTimerAttributes>.activities
             .first(where: { $0.activityState == .active }) {
             liveActivity = active
@@ -129,13 +118,8 @@ final class TimerManager {
         #endif
     }
 
-    // MARK: - Cross-process sync (Live Activity intent → app)
+    // MARK: - Cross-process sync (intent → app)
 
-    /// Subscribe to the Darwin notification `ToggleTimerIntent` posts after it
-    /// writes new state to the shared suite. The C callback can't capture
-    /// `self`, so we hand it an unretained opaque pointer and recover the
-    /// instance inside. Delivered on the main run loop; we hop to main anyway
-    /// to be safe before touching observed state.
     private func registerForStateChanges() {
         let observer = Unmanaged.passUnretained(self).toOpaque()
         CFNotificationCenterAddObserver(
@@ -152,33 +136,44 @@ final class TimerManager {
         )
     }
 
-    /// Adopt state the Live Activity intent just wrote to the shared suite.
-    /// Pure read + local display-timer sync — it must NOT write back to the
-    /// suite or push a Live Activity update, since the intent is the canonical
-    /// writer here and already did both. Writing back would clobber the
-    /// intent's values and could ping-pong.
+    /// Adopt the state in the shared suite (written by an intent or by this
+    /// app earlier), merge it with what we hold, and roll over if needed.
+    /// An intent's action has not reached the synced record yet, so this
+    /// notifies.
     func reconcileFromSharedState() {
-        rehydrate()
-        stopDisplayTimer()
-        if isRunning {
-            startDisplayTimer()
-        }
-        // Nudge computed values so the UI reflects the new baseline at once.
+        let shared = ClockSnapshot(suite: suite)
+        adopt(shared, notify: true)
+    }
+
+    /// Merge `incoming` (from the suite or from the synced record) with the
+    /// current state by the last-action-wins rule, then bring the day up to
+    /// date. `notify` decides whether the merged state is pushed back out to
+    /// the synced record — false when the state came from there.
+    func adopt(_ incoming: ClockSnapshot, notify: Bool) {
+        let merged = ClockSnapshot.merged(local: snapshot, remote: incoming)
+        let changed = merged != snapshot
+        snapshot = merged
+        let rolled = performRolloverIfNeeded()
+        snapshot.write(to: suite)
+        drainPendingSessions()
+        syncDisplayTimer()
+        persistCurrentDaySession()
         tick += 1
+        if (changed || rolled) && notify {
+            onStateChanged?(snapshot)
+        }
+        #if os(iOS)
+        if changed || rolled { updateLiveActivityInPlace() }
+        #endif
     }
 
     // MARK: - Controls
 
     func start() {
         guard !isRunning else { return }
-        let startDate = Date()
-        timerStartedAt = startDate
-        isRunning = true
-        suite.set(dailyElapsed, forKey: TimerKey.dailyElapsed)
-        suite.set(totalElapsed, forKey: TimerKey.totalElapsed)
-        suite.set(true, forKey: TimerKey.timerRunning)
-        suite.set(startDate, forKey: TimerKey.timerStartedAt)
-        startDisplayTimer()
+        performRolloverIfNeeded()
+        snapshot.start(at: Date(), device: deviceID)
+        commit()
         #if os(iOS)
         presentRunningActivity()
         #endif
@@ -186,18 +181,10 @@ final class TimerManager {
 
     func pause() {
         guard isRunning else { return }
-        let interval = timerStartedAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
-        dailyElapsed += interval
-        totalElapsed += interval
-        credit(interval, to: mode)
-        timerStartedAt = nil
-        isRunning = false
-        stopDisplayTimer()
-        persistState()
-        persistCurrentDaySession()
+        performRolloverIfNeeded()
+        snapshot.pause(at: Date(), device: deviceID)
+        commit()
         #if os(iOS)
-        // Update in place — smooth crossfade to paused content. Activity
-        // stays .active so the next resume can update() without flicker.
         updateLiveActivityInPlace()
         #endif
     }
@@ -206,255 +193,120 @@ final class TimerManager {
         isRunning ? pause() : start()
     }
 
-    /// Switch the active study type, splitting a running session at this moment:
-    /// everything up to now is credited to the outgoing type, everything after
-    /// to the incoming one. The clock itself never stops.
-    ///
-    /// The in-flight slice is baked into the stored bases and the reference
-    /// point re-anchored to now — the same manoeuvre `onBackground()` performs.
-    /// That is what keeps the displayed total continuous across the switch:
-    /// stored base plus live interval is unchanged at the instant of the swap,
-    /// so the digits never jump. A jump here would read as lost time.
+    /// Switch the active Study Type, splitting a running session at this
+    /// moment. The clock itself never stops and the digits never jump.
     func setMode(_ newMode: StudyType) {
         guard newMode != mode else { return }
-        if isRunning, let start = timerStartedAt {
-            let now = Date()
-            let interval = max(0, now.timeIntervalSince(start))
-            dailyElapsed += interval
-            totalElapsed += interval
-            credit(interval, to: mode)
-            timerStartedAt = now
-        }
-        mode = newMode
-        suite.studyMode = newMode
-        persistState()
-        persistCurrentDaySession()
+        performRolloverIfNeeded()
+        snapshot.setMode(newMode, at: Date(), device: deviceID)
+        commit()
         #if os(iOS)
         updateLiveActivityInPlace()
         #endif
     }
 
-    /// Add `interval` to a type's daily and all-time buckets, in memory and in
-    /// the shared suite. Called from every path where the aggregate elapsed
-    /// values accrue, so the buckets can never drift from the totals.
-    private func credit(_ interval: TimeInterval, to type: StudyType) {
-        guard interval > 0 else { return }
-        let newDaily = (dailyByType[type] ?? 0) + interval
-        let newTotal = (totalByType[type] ?? 0) + interval
-        dailyByType[type] = newDaily
-        totalByType[type] = newTotal
-        suite.set(newDaily, forKey: TimerKey.daily(type))
-        suite.set(newTotal, forKey: TimerKey.total(type))
+    func setDailyGoal(hours: Int) {
+        snapshot.setDailyGoal(TimeInterval(hours) * 3600, at: Date(), device: deviceID)
+        commit()
+        #if os(iOS)
+        updateLiveActivityInPlace()
+        #endif
     }
 
     // MARK: - Resets
 
     func resetDaily() {
-        let wasRunning = isRunning
-        if wasRunning { pause() }
-        dailyElapsed = 0
-        suite.set(0.0, forKey: TimerKey.dailyElapsed)
-        zeroBuckets(daily: true, total: false)
+        performRolloverIfNeeded()
+        snapshot.resetDaily(at: Date(), device: deviceID)
+        commit()
         #if os(iOS)
         endLiveActivity()
+        if isRunning { presentRunningActivity() }
         #endif
-        if wasRunning { start() }
     }
 
+    /// Zero today and forget the cached past totals. The caller deletes the
+    /// Sessions; the derived All-Time Total is then zero everywhere.
     func resetTotal() {
-        let wasRunning = isRunning
-        if wasRunning { pause() }
-        dailyElapsed = 0
-        totalElapsed = 0
-        suite.set(0.0, forKey: TimerKey.dailyElapsed)
-        suite.set(0.0, forKey: TimerKey.totalElapsed)
-        zeroBuckets(daily: true, total: true)
-        #if os(iOS)
-        endLiveActivity()
-        #endif
-        if wasRunning { start() }
+        resetDaily()
+        setPastTotals(total: 0, byType: [:])
     }
 
     // MARK: - Manual edit support
 
-    /// Apply a manual duration override for a specific date.
-    /// For today: adjusts dailyElapsed and totalElapsed, resets live-counting origin if running.
-    /// For past dates: applies the delta (new - old) to totalElapsed.
-    func applyManualEdit(date: Date, duration: TimeInterval, previousDuration: TimeInterval = 0) {
-        let today = Calendar.current.startOfDay(for: Date())
-        let editDay = Calendar.current.startOfDay(for: date)
-        if editDay == today {
-            let delta = duration - dailyElapsed
-            dailyElapsed = duration
-            // Reset the live-counting reference point so computedDaily doesn't double-count
-            if isRunning { timerStartedAt = Date() }
-            totalElapsed = max(0, totalElapsed + delta)
-        } else {
-            // Adjust total by the difference between old and new duration for past dates
-            let delta = duration - previousDuration
-            totalElapsed = max(0, totalElapsed + delta)
+    /// A Manual Edit for the current Study Day changes the Clock; edits of
+    /// other days only touch Sessions and reach the total via `setPastTotals`.
+    func applyManualEdit(date: Date, duration: TimeInterval) {
+        performRolloverIfNeeded()
+        guard Calendar.current.startOfDay(for: date) == snapshot.studyDay else { return }
+        snapshot.setManualDaily(duration, at: Date(), device: deviceID)
+        commit()
+        #if os(iOS)
+        updateLiveActivityInPlace()
+        #endif
+    }
+
+    // MARK: - Derived totals cache
+
+    /// Set by `StudyStore` whenever Sessions change.
+    func setPastTotals(total: TimeInterval, byType: [StudyType: TimeInterval]) {
+        pastTotal = total
+        pastByType = byType
+        suite.set(total, forKey: TimerKey.pastTotal)
+        for type in StudyType.allCases {
+            suite.set(byType[type] ?? 0, forKey: TimerKey.pastTotal(type))
         }
-        persistState()
     }
 
     // MARK: - Private helpers
 
-    private func rehydrate() {
-        dailyElapsed = suite.double(forKey: TimerKey.dailyElapsed)
-        totalElapsed = suite.double(forKey: TimerKey.totalElapsed)
-        isRunning = suite.bool(forKey: TimerKey.timerRunning)
-        timerStartedAt = suite.object(forKey: TimerKey.timerStartedAt) as? Date
-        mode = suite.studyMode
-        for type in StudyType.allCases {
-            dailyByType[type] = suite.double(forKey: TimerKey.daily(type))
-            totalByType[type] = suite.double(forKey: TimerKey.total(type))
-        }
+    /// Write the state everywhere after a Clock Action.
+    private func commit() {
+        snapshot.write(to: suite)
+        syncDisplayTimer()
+        persistCurrentDaySession()
+        tick += 1
+        onStateChanged?(snapshot)
     }
 
-    private func zeroBuckets(daily: Bool, total: Bool) {
-        for type in StudyType.allCases {
-            if daily {
-                dailyByType[type] = 0
-                suite.set(0.0, forKey: TimerKey.daily(type))
-            }
-            if total {
-                totalByType[type] = 0
-                suite.set(0.0, forKey: TimerKey.total(type))
-            }
+    /// Runs the Rollover; any departing day is queued for persistence.
+    @discardableResult
+    private func performRolloverIfNeeded() -> Bool {
+        let before = snapshot.studyDay
+        if let day = snapshot.rollover(now: Date()) {
+            ClockSnapshot.enqueue(day, in: suite)
+            drainPendingSessions()
         }
+        return snapshot.studyDay != before
     }
 
-    /// Calendar date (startOfDay) that the current `dailyElapsed` should be
-    /// recorded under. The timer's "day" runs from 4am to 4am, so the correct
-    /// calendar date is startOfDay(lastResetDate) when available, otherwise
-    /// the most recent 4am anchor before now.
-    private func currentStudyDayDate() -> Date {
-        let cal = Calendar.current
-        if let lastReset = suite.object(forKey: TimerKey.lastResetDate) as? Date,
-           lastReset > .distantPast {
-            return cal.startOfDay(for: lastReset)
+    private func drainPendingSessions() {
+        guard let persistSession else { return }
+        let pending = ClockSnapshot.pendingDepartingDays(in: suite)
+        guard !pending.isEmpty else { return }
+        ClockSnapshot.clearPendingDepartingDays(in: suite)
+        for day in pending {
+            persistSession(day.date, day.duration, day.breakdown)
         }
-        let now = Date()
-        var comps = cal.dateComponents([.year, .month, .day], from: now)
-        comps.hour = 4
-        comps.minute = 0
-        comps.second = 0
-        let today4am = cal.date(from: comps) ?? now
-        let anchor = now < today4am ? today4am.addingTimeInterval(-86400) : today4am
-        return cal.startOfDay(for: anchor)
     }
 
     private func persistCurrentDaySession() {
-        let duration = computedDaily
-        guard duration > 0 else { return }
-        persistSession?(currentStudyDayDate(), duration, currentDayBreakdown())
-    }
-
-    private func persistState() {
-        suite.set(dailyElapsed, forKey: TimerKey.dailyElapsed)
-        suite.set(totalElapsed, forKey: TimerKey.totalElapsed)
-        suite.set(isRunning, forKey: TimerKey.timerRunning)
-        if let startDate = timerStartedAt {
-            suite.set(startDate, forKey: TimerKey.timerStartedAt)
-        } else {
-            suite.removeObject(forKey: TimerKey.timerStartedAt)
-        }
-    }
-
-    private func check4amBoundary() {
-        let calendar = Calendar.current
+        guard snapshot.studyDay > .distantPast else { return }
         let now = Date()
-        let lastReset = suite.object(forKey: TimerKey.lastResetDate) as? Date ?? .distantPast
+        let duration = snapshot.daily(at: now)
+        guard duration > 0 else { return }
+        persistSession?(snapshot.studyDay, duration, snapshot.breakdown(at: now))
+    }
 
-        // Find the most recent 4am boundary before now
-        var components = calendar.dateComponents([.year, .month, .day], from: now)
-        components.hour = 4
-        components.minute = 0
-        components.second = 0
-        guard let todayAt4am = calendar.date(from: components) else { return }
-        let boundary = now < todayAt4am
-            ? todayAt4am.addingTimeInterval(-86400)
-            : todayAt4am
-
-        guard lastReset < boundary else { return }
-
-        // totalElapsed is always kept in sync with dailyElapsed via pause() and onBackground(),
-        // so it already includes dailyElapsed — do NOT add dailyElapsed again.
-        //
-        // For a running timer we need to adjust for in-flight time relative to the boundary:
-        //   • timerStartedAt < boundary: totalElapsed doesn't yet include time from startedAt
-        //     to boundary → add that pre-boundary slice.
-        //   • timerStartedAt > boundary: onBackground() already baked post-boundary time into
-        //     totalElapsed that belongs to the new day → subtract it back out.
-        let wasRunning = suite.bool(forKey: TimerKey.timerRunning)
-        var preBoundaryElapsed: TimeInterval = 0
-        var postBoundaryInTotal: TimeInterval = 0
-        if wasRunning,
-           let startedAt = suite.object(forKey: TimerKey.timerStartedAt) as? Date {
-            if startedAt < boundary {
-                preBoundaryElapsed = max(0, boundary.timeIntervalSince(startedAt))
-            } else {
-                postBoundaryInTotal = max(0, startedAt.timeIntervalSince(boundary))
-            }
-        }
-
-        let savedTotal = suite.double(forKey: TimerKey.totalElapsed)
-        let newTotal = savedTotal - postBoundaryInTotal + preBoundaryElapsed
-
-        // The same correction applies to the per-type buckets, but only to the
-        // type that was running: an in-flight run belongs entirely to one type,
-        // so no other bucket straddles the boundary.
-        let runningMode = suite.studyMode
-        var departingBreakdown: [StudyType: TimeInterval] = [:]
-        var newTotalByType: [StudyType: TimeInterval] = [:]
-        for type in StudyType.allCases {
-            let savedTypeDaily = suite.double(forKey: TimerKey.daily(type))
-            let savedTypeTotal = suite.double(forKey: TimerKey.total(type))
-            let isRunningType = (type == runningMode)
-            departingBreakdown[type] = savedTypeDaily + (isRunningType ? preBoundaryElapsed : 0)
-            newTotalByType[type] = isRunningType
-                ? max(0, savedTypeTotal - postBoundaryInTotal + preBoundaryElapsed)
-                : savedTypeTotal
-        }
-
-        // Persist the departing day's session before zeroing. `dailyElapsed` in
-        // UserDefaults represents accumulated study for the day that *started*
-        // at lastReset's 4am anchor; add the pre-boundary in-flight slice if
-        // the timer was running across the boundary.
-        let savedDaily = suite.double(forKey: TimerKey.dailyElapsed)
-        let endedDayDuration = savedDaily + preBoundaryElapsed
-        if endedDayDuration > 0, lastReset > .distantPast {
-            let endedDay = calendar.startOfDay(for: lastReset)
-            persistSession?(endedDay, endedDayDuration, departingBreakdown)
-        }
-
-        suite.set(0.0, forKey: TimerKey.dailyElapsed)
-        suite.set(newTotal, forKey: TimerKey.totalElapsed)
-        suite.set(now, forKey: TimerKey.lastResetDate)
-
-        // New day: daily buckets start empty, corrected all-time buckets carry over.
-        for type in StudyType.allCases {
-            dailyByType[type] = 0
-            totalByType[type] = newTotalByType[type] ?? 0
-            suite.set(0.0, forKey: TimerKey.daily(type))
-            suite.set(newTotalByType[type] ?? 0, forKey: TimerKey.total(type))
-        }
-
-        dailyElapsed = 0
-        totalElapsed = newTotal
-
-        // Re-anchor timerStartedAt to the boundary so computedDaily only counts
-        // post-boundary time. rehydrate() runs immediately after and reads this.
-        if wasRunning {
-            suite.set(boundary, forKey: TimerKey.timerStartedAt)
-            timerStartedAt = boundary
-        }
+    private func syncDisplayTimer() {
+        stopDisplayTimer()
+        if isRunning { startDisplayTimer() }
     }
 
     private func startDisplayTimer() {
         stopDisplayTimer()
         displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.tick += 1
+            Task { @MainActor in self?.tick += 1 }
         }
     }
 
@@ -466,24 +318,9 @@ final class TimerManager {
     // MARK: - Live Activity management
 
     #if os(iOS)
-    private var currentDailyGoal: TimeInterval {
-        let g = suite.double(forKey: TimerKey.dailyGoal)
-        return g > 0 ? g : 14400
-    }
-
-    private func makeContentState() -> RussianTimerAttributes.ContentState {
-        RussianTimerAttributes.ContentState(
-            dailyElapsed: dailyElapsed,
-            isRunning: isRunning,
-            timerStartedAt: timerStartedAt,
-            dailyGoal: currentDailyGoal,
-            mode: mode
-        )
-    }
-
     private func contentForCurrentState() -> ActivityContent<RussianTimerAttributes.ContentState> {
         let dismissAt = Date.now.addingTimeInterval(liveActivityIdleTimeout)
-        return ActivityContent(state: makeContentState(), staleDate: dismissAt)
+        return ActivityContent(state: snapshot.liveActivityState, staleDate: dismissAt)
     }
 
     /// Bring the Live Activity to a running .active state. Updates an existing
@@ -496,51 +333,38 @@ final class TimerManager {
             Task { await active.update(contentForCurrentState()) }
             return
         }
-        // No active — clear any ghosts in dismissal grace so we don't stack
         for ghost in allActivities {
             Task { await ghost.end(nil, dismissalPolicy: .immediate) }
         }
-        let authInfo = ActivityAuthorizationInfo()
-        guard authInfo.areActivitiesEnabled else {
-            print("[LiveActivity] Blocked: Live Activities disabled.")
-            return
-        }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         do {
             liveActivity = try Activity<RussianTimerAttributes>.request(
                 attributes: RussianTimerAttributes(),
                 content: contentForCurrentState()
             )
-            print("[LiveActivity] Started")
         } catch {
             print("[LiveActivity] request failed: \(error)")
         }
     }
 
-    /// Smoothly update the Live Activity in place. Used for both pause and
-    /// resume so neither transition triggers a teardown/recreate flicker.
-    /// Auto-dismissal is left to the 30-min staleDate — keeping the activity
-    /// .active means update() always works on the next state change.
+    /// Smoothly update the Live Activity in place. Used for pause, resume and
+    /// remote changes so no transition triggers a teardown/recreate flicker.
     private func updateLiveActivityInPlace() {
         let active = Activity<RussianTimerAttributes>.activities
-            .first(where: { $0.activityState == .active })
+            .first(where: { $0.activityState == .active || $0.activityState == .stale })
         guard let active else { return }
         liveActivity = active
         Task { await active.update(contentForCurrentState()) }
     }
 
     /// End every Live Activity, not just the one held in `liveActivity` — an
-    /// activity started from the Lock Screen (via the intent) is owned by a
-    /// different launch and won't be in our stored reference, so relying on it
-    /// would orphan the widget on a daily/total reset.
+    /// activity started from the Lock Screen is owned by a different launch.
     private func endLiveActivity() {
-        let finalState = RussianTimerAttributes.ContentState(
-            dailyElapsed: 0,
-            isRunning: false,
-            timerStartedAt: nil,
-            dailyGoal: currentDailyGoal,
-            mode: mode
-        )
-        let content = ActivityContent(state: finalState, staleDate: .now)
+        var final = snapshot
+        final.isRunning = false
+        final.runStartedAt = nil
+        final.dailyBase = 0
+        let content = ActivityContent(state: final.liveActivityState, staleDate: .now)
         let activities = Activity<RussianTimerAttributes>.activities
         Task {
             for activity in activities {

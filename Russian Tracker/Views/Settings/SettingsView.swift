@@ -47,9 +47,7 @@ struct SettingsView: View {
                     display: "\(dailyGoalHours)h"
                 ) { newValue in
                     dailyGoalHours = newValue
-                    UserDefaults(suiteName: appGroupSuite)?.set(
-                        Double(newValue) * 3600, forKey: "dailyGoal"
-                    )
+                    timer.setDailyGoal(hours: newValue)
                 }
             }
             SettingsDivider()
@@ -106,6 +104,16 @@ struct SettingsView: View {
                     .font(.system(size: 14, weight: .regular, design: .monospaced))
                     .foregroundColor(.bronzeMuted)
             }
+            SettingsDivider()
+            // The one place sync status appears. Muted on purpose: trust needs
+            // somewhere to check, the Timer screen stays silent.
+            SettingsRow(icon: "icloud", label: "Sync") {
+                Text(store.syncStatusText)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.bronzeMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
     }
 
@@ -120,6 +128,12 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // The modifier chain is split into stages so the type-checker does not
+        // have to solve one enormous expression.
+        withBackupFlows
+    }
+
+    private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 pageHeader
@@ -134,95 +148,104 @@ struct SettingsView: View {
         }
         .background(Color.eggshell.ignoresSafeArea())
         .onAppear {
-            let g = UserDefaults(suiteName: appGroupSuite)?.double(forKey: "dailyGoal") ?? 0
-            dailyGoalHours = g > 0 ? Int(g / 3600) : 4
+            dailyGoalHours = max(1, Int(timer.dailyGoal / 3600))
         }
         .tint(.rosyCopper)
-        .alert("Reset Daily Timer?", isPresented: $showResetDailyAlert) {
-            Button("Reset", role: .destructive) {
-                timer.resetDaily()
-                store.upsertSession(date: Date(), duration: 0)
+    }
+
+    private var withResetAlerts: some View {
+        page
+            .alert("Reset Daily Timer?", isPresented: $showResetDailyAlert) {
+                Button("Reset", role: .destructive) {
+                    timer.resetDaily()
+                    store.upsertSession(date: timer.studyDay, duration: 0)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Today's study time will be reset to 0:00:00.")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Today's study time will be reset to 0:00:00.")
-        }
-        .alert("Reset All-Time Total?", isPresented: $showResetTotalAlert1) {
-            Button("Continue", role: .destructive) {
-                showResetTotalAlert2 = true
+            .alert("Reset All-Time Total?", isPresented: $showResetTotalAlert1) {
+                Button("Continue", role: .destructive) {
+                    showResetTotalAlert2 = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently erase your all-time study total. Are you sure?")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently erase your all-time study total. Are you sure?")
-        }
-        .alert("This Cannot Be Undone", isPresented: $showResetTotalAlert2) {
-            Button("Reset Everything", role: .destructive) {
-                timer.resetTotal()
-                store.deleteAllSessions()
+            .alert("This Cannot Be Undone", isPresented: $showResetTotalAlert2) {
+                Button("Reset Everything", role: .destructive) {
+                    timer.resetTotal()
+                    store.deleteAllSessions()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This deletes every session on all your devices. Your entire study history will be permanently erased.")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your entire study history total will be permanently deleted.")
-        }
-        .sheet(isPresented: $showManualEdit) {
-            ManualEditView()
-                .environment(timer)
-                .environment(store)
-        }
-        .sheet(isPresented: $showAdvanced) {
-            AdvancedSheet(showManualEdit: $showManualEdit)
-                .environment(timer)
-                .environment(store)
-        }
-        .sheet(item: $exportFile) { file in
-            ActivityView(items: [file.url])
-        }
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.json],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                do {
-                    importPreviewText = try store.importPreview(from: url)
-                    pendingImportURL = url
-                    showImportConfirm = true
-                } catch {
-                    importError = "Could not read backup: \(error.localizedDescription)"
+    }
+
+    private var withSheets: some View {
+        withResetAlerts
+            .sheet(isPresented: $showManualEdit) {
+                ManualEditView()
+                    .environment(timer)
+                    .environment(store)
+            }
+            .sheet(isPresented: $showAdvanced) {
+                AdvancedSheet(showManualEdit: $showManualEdit)
+                    .environment(timer)
+                    .environment(store)
+            }
+            .exportPresentation(file: $exportFile)
+    }
+
+    private var withBackupFlows: some View {
+        withSheets
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    do {
+                        importPreviewText = try store.importPreview(from: url)
+                        pendingImportURL = url
+                        showImportConfirm = true
+                    } catch {
+                        importError = "Could not read backup: \(error.localizedDescription)"
+                        showImportError = true
+                    }
+                case .failure(let error):
+                    importError = error.localizedDescription
                     showImportError = true
                 }
-            case .failure(let error):
-                importError = error.localizedDescription
-                showImportError = true
             }
-        }
-        .alert("Restore Backup?", isPresented: $showImportConfirm) {
-            Button("Restore", role: .destructive) {
-                guard let url = pendingImportURL else { return }
-                pendingImportURL = nil
-                do {
-                    try store.applyBackup(from: url, timer: timer)
-                } catch {
-                    importError = "Import failed: \(error.localizedDescription)"
-                    showImportError = true
+            .alert("Restore Backup?", isPresented: $showImportConfirm) {
+                Button("Restore", role: .destructive) {
+                    guard let url = pendingImportURL else { return }
+                    pendingImportURL = nil
+                    do {
+                        try store.applyBackup(from: url, timer: timer)
+                    } catch {
+                        importError = "Import failed: \(error.localizedDescription)"
+                        showImportError = true
+                    }
                 }
+                Button("Cancel", role: .cancel) { pendingImportURL = nil }
+            } message: {
+                Text(importPreviewText)
             }
-            Button("Cancel", role: .cancel) { pendingImportURL = nil }
-        } message: {
-            Text(importPreviewText)
-        }
-        .alert("Export Failed", isPresented: $showExportError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(exportError)
-        }
-        .alert("Import Failed", isPresented: $showImportError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(importError)
-        }
+            .alert("Export Failed", isPresented: $showExportError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(exportError)
+            }
+            .alert("Import Failed", isPresented: $showImportError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importError)
+            }
     }
 }
 
@@ -411,9 +434,11 @@ private struct AdvancedSheet: View {
             .padding(.top, 16)
             .background(Color.eggshell.ignoresSafeArea())
             .navigationTitle("Advanced")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .foregroundColor(.rosyCopper)
                 }
@@ -429,6 +454,29 @@ private struct ExportFile: Identifiable {
     let url: URL
 }
 
+private extension View {
+    /// iOS hands the backup to the system share sheet. macOS has no share
+    /// sheet for a file URL, so it opens a save panel through `fileExporter`.
+    @ViewBuilder
+    func exportPresentation(file: Binding<ExportFile?>) -> some View {
+        #if os(iOS)
+        self.sheet(item: file) { f in
+            ActivityView(items: [f.url])
+        }
+        #else
+        self.fileExporter(
+            isPresented: Binding(
+                get: { file.wrappedValue != nil },
+                set: { if !$0 { file.wrappedValue = nil } }
+            ),
+            document: file.wrappedValue.map { JSONBackupDocument(url: $0.url) },
+            contentType: .json,
+            defaultFilename: file.wrappedValue?.url.lastPathComponent
+        ) { _ in }
+        #endif
+    }
+}
+
 #if os(iOS)
 private struct ActivityView: UIViewControllerRepresentable {
     let items: [Any]
@@ -436,6 +484,24 @@ private struct ActivityView: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#else
+/// Wraps the already-written backup JSON so `fileExporter` can save it.
+private struct JSONBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    let data: Data
+
+    init(url: URL) {
+        data = (try? Data(contentsOf: url)) ?? Data()
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
 }
 #endif
 

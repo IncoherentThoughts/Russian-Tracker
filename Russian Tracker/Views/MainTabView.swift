@@ -23,18 +23,41 @@ struct MainTabView: View {
             // drag halfway, and release to snap to whichever side you're
             // majority on. Vertical scrolling inside child views still works
             // because TabView only claims horizontal pans.
-            TabView(selection: $selectedTab) {
-                StatsView().tag(Tab.stats)
-                TimerView().tag(Tab.timer)
-                SettingsView().tag(Tab.settings)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea(.keyboard)
+            pages
 
             FloatingTabBar(selectedTab: $selectedTab)
                 .padding(.bottom, 22)
         }
         .background(Color.eggshell.ignoresSafeArea())
+    }
+}
+
+// MARK: - Pages
+
+private extension MainTabView {
+    /// iOS keeps the native paging TabView (interactive drag-with-snap).
+    /// macOS has no page style, so the three screens swap in place with a
+    /// short slide instead; navigation there is the tab bar and ⌘1/⌘2/⌘3.
+    @ViewBuilder
+    var pages: some View {
+        #if os(iOS)
+        TabView(selection: $selectedTab) {
+            StatsView().tag(Tab.stats)
+            TimerView().tag(Tab.timer)
+            SettingsView().tag(Tab.settings)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .ignoresSafeArea(.keyboard)
+        #else
+        ZStack {
+            switch selectedTab {
+            case .stats:    StatsView().transition(.move(edge: .leading).combined(with: .opacity))
+            case .timer:    TimerView().transition(.opacity)
+            case .settings: SettingsView().transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: selectedTab)
+        #endif
     }
 }
 

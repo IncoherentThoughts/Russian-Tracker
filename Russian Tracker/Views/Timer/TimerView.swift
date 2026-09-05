@@ -5,10 +5,7 @@ struct TimerView: View {
 
     @State private var buttonScale: CGFloat = 1.0
 
-    private var dailyGoalSeconds: TimeInterval {
-        let g = UserDefaults(suiteName: appGroupSuite)?.double(forKey: "dailyGoal") ?? 0
-        return g > 0 ? g : 14400
-    }
+    private var dailyGoalSeconds: TimeInterval { timer.dailyGoal }
 
     private var dailyGoalHours: Int { Int(dailyGoalSeconds / 3600) }
 

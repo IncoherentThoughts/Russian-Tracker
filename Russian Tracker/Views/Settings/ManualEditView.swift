@@ -69,9 +69,8 @@ struct ManualEditView: View {
     }
 
     private func saveSession() {
-        let previousDuration = store.session(for: selectedDate)?.duration ?? 0
         store.upsertSession(date: selectedDate, duration: durationSeconds, isManual: true)
-        timer.applyManualEdit(date: selectedDate, duration: durationSeconds, previousDuration: previousDuration)
+        timer.applyManualEdit(date: selectedDate, duration: durationSeconds)
         dismiss()
     }
 }

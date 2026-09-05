@@ -1,11 +1,16 @@
 import Foundation
 import SwiftData
 
+/// One Session per Study Day. Every property has a default and nothing is
+/// unique, as CloudKit requires; the one-per-day rule is kept by
+/// `StudyStore.dedupeSessions()` instead, using `updatedAt` (later wins).
 @Model
 final class StudySession {
-    var date: Date            // normalized to midnight (start of day)
-    var duration: TimeInterval // total seconds studied that day
-    var isManualEdit: Bool    // true if user manually edited this entry
+    var date: Date = Date.distantPast   // normalized to midnight (start of day)
+    var duration: TimeInterval = 0      // total seconds studied that day
+    var isManualEdit: Bool = false      // true if user manually edited this entry
+    /// When this record was last written. Resolves duplicates after a merge.
+    var updatedAt: Date = Date.distantPast
 
     // Per-type breakdown of `duration`.
     //
@@ -35,6 +40,7 @@ final class StudySession {
         self.grammarDuration = grammarDuration
         self.immersionDuration = immersionDuration
         self.outputDuration = outputDuration
+        self.updatedAt = Date()
     }
 }
 

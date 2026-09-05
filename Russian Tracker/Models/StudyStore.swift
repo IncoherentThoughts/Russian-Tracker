@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CoreData
 
 // MARK: - Backup data types (shared encoding contract for export/import)
 
@@ -53,8 +54,17 @@ final class StudyStore {
             predicate: #Predicate { $0.date == normalized }
         )
         if let existing = try? context.fetch(descriptor).first {
+            // Skip no-op writes: every save echoes back as a store change
+            // notification, and an unconditional timestamp bump would loop.
+            let sameBreakdown = breakdown.map { b in
+                StudyType.allCases.allSatisfy { existing.duration(for: $0) == max(0, b[$0] ?? 0) }
+            } ?? true
+            if existing.duration == duration, existing.isManualEdit == isManual, sameBreakdown {
+                return
+            }
             existing.duration = duration
             existing.isManualEdit = isManual
+            existing.updatedAt = Date()
             Self.apply(breakdown, to: existing, total: duration)
         } else {
             let session = StudySession(date: normalized, duration: duration, isManualEdit: isManual)
@@ -66,6 +76,7 @@ final class StudyStore {
         } catch {
             print("StudyStore: save failed — \(error)")
         }
+        refreshPastTotals()
     }
 
     /// Writes `breakdown` onto `session`, or clamps its existing typed values
@@ -98,6 +109,7 @@ final class StudyStore {
         } catch {
             print("StudyStore: deleteAllSessions failed — \(error)")
         }
+        refreshPastTotals()
     }
 
     /// Single session lookup — used by ManualEditView to pre-fill the duration field.
@@ -110,30 +122,150 @@ final class StudyStore {
         return try? context.fetch(descriptor).first
     }
 
-    // MARK: - Data Integrity
+    // MARK: - Clock record (synced Clock State)
 
-    /// One-time recalibration to fix totalElapsed if it was corrupted by the
-    /// double-counting bug in check4amBoundary (which previously added dailyElapsed
-    /// to totalElapsed even though totalElapsed already included dailyElapsed).
-    /// Recomputes totalElapsed as sum-of-past-sessions + today's dailyElapsed,
-    /// then marks the migration done so it never runs again.
-    func recalibrateTotalIfNeeded(timer: TimerManager) {
-        let suite = UserDefaults(suiteName: appGroupSuite)
-        let migrationKey = "totalRecalibratedV2"
-        guard !(suite?.bool(forKey: migrationKey) ?? false) else { return }
+    /// The `TimerManager` whose derived totals this store keeps current.
+    weak var timer: TimerManager?
+
+    /// The single synced Clock State record, created on first use. If a
+    /// first sync between two devices left more than one, the record with the
+    /// latest action is kept and the others removed.
+    func clockRecord() -> ClockState? {
+        guard let context = modelContext else { return nil }
+        let all = (try? context.fetch(FetchDescriptor<ClockState>())) ?? []
+        guard let winner = all.max(by: { $0.lastActionAt < $1.lastActionAt }) else {
+            let fresh = ClockState()
+            context.insert(fresh)
+            return fresh
+        }
+        for loser in all where loser !== winner {
+            context.delete(loser)
+        }
+        return winner
+    }
+
+    /// Mirror the in-memory Clock State into the synced record.
+    func saveClock(_ snapshot: ClockSnapshot) {
+        guard let context = modelContext, let record = clockRecord() else { return }
+        if record.snapshot != snapshot {
+            record.apply(snapshot)
+            try? context.save()
+        }
+    }
+
+    /// The synced Clock State, if a record exists.
+    func loadClock() -> ClockSnapshot? {
+        clockRecord()?.snapshot
+    }
+
+    // MARK: - Sync (CloudKit via SwiftData)
+
+    /// False when the container had to fall back to a local-only store.
+    var cloudSyncEnabled = false
+
+    /// When the store last reported a change that was not ours.
+    private(set) var lastRemoteChangeAt: Date?
+
+    /// Whether this device is signed into iCloud at all.
+    var iCloudSignedIn: Bool {
+        FileManager.default.ubiquityIdentityToken != nil
+    }
+
+    /// One muted line for Settings: the only place sync status appears.
+    var syncStatusText: String {
+        guard cloudSyncEnabled else { return "iCloud · unavailable on this build" }
+        guard iCloudSignedIn else { return "iCloud · not signed in" }
+        guard let at = lastRemoteChangeAt else { return "iCloud · waiting for first sync" }
+        let rel = RelativeDateTimeFormatter()
+        rel.unitsStyle = .short
+        return "iCloud · synced \(rel.localizedString(for: at, relativeTo: Date()))"
+    }
+
+    @ObservationIgnored private var remoteChangeObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var remoteChangeTask: Task<Void, Never>?
+
+    /// Listen for store changes. CloudKit imports and our own saves both post
+    /// this; the handler is idempotent so it does not matter which it was.
+    func startObservingRemoteChanges() {
+        guard remoteChangeObserver == nil else { return }
+        remoteChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in self?.scheduleRemoteReconcile() }
+        }
+    }
+
+    /// Coalesce bursts of notifications (an import touches many rows) into
+    /// one reconcile shortly after the last one.
+    private func scheduleRemoteReconcile() {
+        remoteChangeTask?.cancel()
+        remoteChangeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.handleRemoteChange()
+        }
+    }
+
+    /// Adopt whatever arrived: the Clock State by the last-action-wins rule,
+    /// then Sessions by de-duplication. The timer re-persists today from the
+    /// winning state, so the two can never disagree.
+    func handleRemoteChange() {
+        guard let timer else { return }
+        let before = timer.snapshot
+        if let synced = loadClock() {
+            timer.adopt(synced, notify: false)
+        }
+        dedupeSessions()
+        if timer.snapshot != before {
+            lastRemoteChangeAt = Date()
+        } else if lastRemoteChangeAt == nil, cloudSyncEnabled, iCloudSignedIn {
+            lastRemoteChangeAt = Date()
+        }
+    }
+
+    // MARK: - Derived totals (ADR 0002)
+
+    /// Recompute the sum of every Session other than the current Study Day's
+    /// (which the Clock covers) and hand it to the timer, which caches it for
+    /// the widgets and intents.
+    func refreshPastTotals() {
+        guard let timer else { return }
+        let sessions = fetchAllSessions().filter { $0.date != timer.studyDay }
+        let total = sessions.reduce(0) { $0 + $1.duration }
+        var byType: [StudyType: TimeInterval] = [:]
+        for type in StudyType.allCases {
+            byType[type] = sessions.reduce(0) { $0 + $1.duration(for: type) }
+        }
+        timer.setPastTotals(total: total, byType: byType)
+    }
+
+    // MARK: - Merge hygiene
+
+    /// Keep one Session per date: the most recently updated wins. Sessions
+    /// dated on or after the current Study Day are left to the timer, which
+    /// re-persists today from the winning Clock State.
+    func dedupeSessions() {
         guard let context = modelContext else { return }
-
-        let today = Calendar.current.startOfDay(for: Date())
-        let descriptor = FetchDescriptor<StudySession>(
-            predicate: #Predicate { $0.date < today }
-        )
-        let pastSessions = (try? context.fetch(descriptor)) ?? []
-        let pastTotal = pastSessions.reduce(0) { $0 + $1.duration }
-        let todayDaily = suite?.double(forKey: "dailyElapsed") ?? 0
-
-        suite?.set(pastTotal + todayDaily, forKey: "totalElapsed")
-        suite?.set(true, forKey: migrationKey)
-        timer.onForeground()
+        let all = fetchAllSessions()
+        var seen: [Date: StudySession] = [:]
+        var removed = false
+        for session in all {
+            if let kept = seen[session.date] {
+                let loser = kept.updatedAt >= session.updatedAt ? session : kept
+                let winner = loser === kept ? session : kept
+                context.delete(loser)
+                seen[session.date] = winner
+                removed = true
+            } else {
+                seen[session.date] = session
+            }
+        }
+        if removed {
+            try? context.save()
+        }
+        refreshPastTotals()
     }
 
     // MARK: - Backup & Restore
@@ -142,14 +274,12 @@ final class StudyStore {
     /// in the system temp directory. Returns the file URL for sharing.
     func exportBackupFile(timer: TimerManager) throws -> URL {
         let sessions = fetchAllSessions()
-        let suite = UserDefaults(suiteName: appGroupSuite)
-        let lastResetDate = suite?.object(forKey: "lastResetDate") as? Date
 
         let backup = StatsBackup(
             exportDate: Date(),
             dailyElapsed: timer.computedDaily,
             totalElapsed: timer.computedTotal,
-            lastResetDate: lastResetDate,
+            lastResetDate: timer.studyDay > .distantPast ? timer.studyDay : nil,
             sessions: sessions.map {
                 SessionBackup(
                     date: $0.date,
@@ -192,7 +322,10 @@ final class StudyStore {
     }
 
     /// Restores all sessions and timer state from a backup file.
-    /// Pauses the timer, replaces SwiftData records, writes UserDefaults, then rehydrates.
+    ///
+    /// Pauses the timer, replaces the Sessions, then installs a paused Clock
+    /// State carrying the backup's day. The restore is stamped as a Clock
+    /// Action so it wins over whatever stale state other devices still hold.
     func applyBackup(from url: URL, timer: TimerManager) throws {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
@@ -217,23 +350,22 @@ final class StudyStore {
         }
         try? context.save()
 
-        let suite = UserDefaults(suiteName: appGroupSuite)
-        suite?.set(backup.dailyElapsed, forKey: "dailyElapsed")
-        suite?.set(backup.totalElapsed, forKey: "totalElapsed")
-        suite?.set(false,              forKey: "timerRunning")
-        suite?.removeObject(forKey: "timerStartedAt")
-        if let lastReset = backup.lastResetDate {
-            suite?.set(lastReset, forKey: TimerKey.lastResetDate)
-        }
-        // Per-type buckets. A pre-study-type backup carries none, in which case
-        // the buckets are zeroed rather than left showing the old app's numbers.
+        var restored = ClockSnapshot()
+        restored.studyDay = backup.lastResetDate.map { Calendar.current.startOfDay(for: $0) }
+            ?? ClockSnapshot.studyDayStart(for: Date())
+        restored.dailyBase = backup.dailyElapsed
+        // A pre-study-type backup carries no buckets, in which case they stay
+        // empty rather than showing the old app's numbers.
         for type in StudyType.allCases {
-            suite?.set(backup.dailyByType?[type.rawValue] ?? 0, forKey: TimerKey.daily(type))
-            suite?.set(backup.totalByType?[type.rawValue] ?? 0, forKey: TimerKey.total(type))
+            if let v = backup.dailyByType?[type.rawValue], v > 0 {
+                restored.dailyByType[type] = v
+            }
         }
-
-        // Rehydrate all in-memory timer state from the restored UserDefaults values.
-        timer.onForeground()
+        restored.dailyGoal = timer.dailyGoal
+        restored.mode = timer.mode
+        restored.lastActionAt = Date()
+        timer.adopt(restored, notify: true)
+        refreshPastTotals()
     }
 
     // MARK: - Private helpers

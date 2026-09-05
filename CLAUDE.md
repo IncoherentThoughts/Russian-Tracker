@@ -190,33 +190,16 @@ extension Color {
 
 ## Timer Logic (Critical Implementation Notes)
 
-```swift
-// TimerManager.swift — core behavior contract
+Vocabulary is in `CONTEXT.md`; the sync design is in `docs/adr/0001`, derived totals in `docs/adr/0002`.
 
-// Storage keys (shared UserDefaults suite for Live Activity access)
-// "dailyElapsed"         — Double (seconds) for today
-// "totalElapsed"         — Double (seconds) all time
-// "lastResetDate"        — Date of last 4am reset
-// "timerRunning"         — Bool
-// "timerStartedAt"       — Date? (when currently running session began)
-// "dailyGoal"            — Double (seconds), default 14400 (4 hours)
+- `ClockSnapshot` (`Models/ClockSnapshot.swift`) is the Clock State as a plain value. Every Clock Action (start, pause, mode switch, reset, manual edit, goal) is a mutating method on it that banks the in-flight run first and stamps `lastActionAt`. It is compiled into both the app and the widget extension.
+- `TimerManager` owns the in-memory snapshot. After each action it writes the app-group suite, persists today's Session, and calls `onStateChanged`, which the app uses to mirror the snapshot into the synced `ClockState` SwiftData record.
+- Intents (`ToggleTimerIntent`, `SetStudyModeIntent`) load a `ClockSnapshot` from the suite, apply the action, write it back, and post the Darwin notification; the app then reconciles and pushes to the synced record. A Rollover performed by an intent queues the departing day under `pendingSessions` for the app to persist.
+- Rollover (`ClockSnapshot.rollover`) is idempotent and does not stamp `lastActionAt`. It runs at init, before every action, on foreground, and after every adopt.
+- Conflicts: `ClockSnapshot.merged(local:remote:)` — later `lastActionAt` wins; ties go to the state with the later Study Day.
+- All-time totals are derived: `TimerManager.pastTotal` (cached by `StudyStore.refreshPastTotals`) plus today's Clock. There is no stored total counter.
 
-// On every app foreground:
-// 1. Check if a new 4am boundary has passed since lastResetDate
-// 2. If yes: add dailyElapsed to totalElapsed, reset dailyElapsed to 0, update lastResetDate
-// 3. If timerRunning == true and timerStartedAt is set:
-//    add (now - timerStartedAt) to displayed time (do NOT persist yet — persist on pause or background)
-
-// On pause / background / app kill:
-// Persist current elapsed to shared UserDefaults immediately
-// Update timerStartedAt = nil, timerRunning = false (or keep running flag + timestamp for background)
-
-// Background running:
-// Timer continues even when app is backgrounded — track by start timestamp, compute on return
-// Do NOT use a live Timer in background — just store the start time and calculate difference on return
-```
-
----
+Shared UserDefaults keys are listed in `TimerKey` (`Models/RussianTimerAttributes.swift`). Retired: `totalElapsed`, `total_<type>`, `lastResetDate` (read once for migration into `studyDay`).
 
 ## Live Activity Implementation Notes
 
@@ -309,7 +292,7 @@ class StudySession {
 
 ---
 
-*Last updated: 2026-03-01 — replaced WidgetKit lock screen widget with ActivityKit Live Activity.*
+*Last updated: 2026-09-05 — Clock State refactor for cross-device sync (Phase 1 of docs/plans/2026-09-05-mac-app-and-sync.md).*
 
 ---
 
