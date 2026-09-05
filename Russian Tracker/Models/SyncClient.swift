@@ -17,7 +17,7 @@ nonisolated struct ClockRow: Codable, Equatable {
     var daily_base: Double
     var daily_grammar: Double
     var daily_immersion: Double
-    var daily_output: Double
+    var daily_anki: Double
     var daily_goal: Double
     var last_action_at: String
     var last_action_device: String
@@ -31,7 +31,7 @@ nonisolated struct ClockRow: Codable, Equatable {
         daily_base = s.dailyBase
         daily_grammar = s.dailyByType[.grammar] ?? 0
         daily_immersion = s.dailyByType[.immersion] ?? 0
-        daily_output = s.dailyByType[.anki] ?? 0
+        daily_anki = s.dailyByType[.anki] ?? 0
         daily_goal = s.dailyGoal
         last_action_at = SyncDate.string(s.lastActionAt)
         last_action_device = s.lastActionDevice
@@ -44,7 +44,7 @@ nonisolated struct ClockRow: Codable, Equatable {
         s.mode = StudyType(stored: mode) ?? .grammar
         s.studyDay = SyncDate.date(study_day) ?? .distantPast
         s.dailyBase = daily_base
-        s.dailyByType = [.grammar: daily_grammar, .immersion: daily_immersion, .anki: daily_output]
+        s.dailyByType = [.grammar: daily_grammar, .immersion: daily_immersion, .anki: daily_anki]
             .filter { $0.value > 0 }
         s.dailyGoal = daily_goal
         s.lastActionAt = SyncDate.date(last_action_at) ?? .distantPast
