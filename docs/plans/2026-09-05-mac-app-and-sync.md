@@ -94,6 +94,13 @@ Notes from doing it: `AppServices` (in `Russian_TrackerApp.swift`) builds the co
 
 Exit: launching shows only a menu bar item; popover starts/pauses; window opens and closes without quitting.
 
+Notes (done 2026-09-05, branch `p3-mac-shell`):
+- New `Russian Tracker/Mac/`: `AppDelegate.swift` (activation policy, never quits on close, Phase 4 hotkey hook comment), `MenuBarPopoverView.swift` (also holds `MenuBarLabel`), `MacRolloverScheduler.swift` (4am `Timer` + `didWakeNotification` + window-became-key + clock/time-zone change, all → `TimerManager.onForeground()`), `WindowNavigation.swift` (selected tab shared between the Go menu and `MainTabView`).
+- The main window is a `Window` (id `main`), not a `WindowGroup`, so "Open Russian Tracker" reuses it. Content is framed 420×780 with `.windowResizability(.contentSize)`.
+- Go menu: ⌘1 Timer, ⌘2 Stats, ⌘3 Settings. ⌘Q also works inside the popover (Quit button carries the shortcut); Space toggles Start/Pause there.
+- The popover's goal bar is fed `snapshot.dailyBase` + `runStartedAt` (same anchor as the Live Activity), so it ticks without app updates.
+- Item 5 (fileExporter/fileImporter) was not part of this pass; the iOS share sheet is still `#if os(iOS)`-guarded.
+
 ## Phase 4 — Hotkeys and App Shortcuts
 
 1. `KeyboardShortcuts.Name` for `toggleClock` (⌥0), `setGrammar` (⌥1), `setImmersion` (⌥2), `setOutput` (⌥3). Register handlers in the AppDelegate calling `TimerManager`.
