@@ -16,6 +16,10 @@ enum Tab: Int, CaseIterable {
 
 struct MainTabView: View {
     @State private var selectedTab: Tab = .timer
+    #if os(macOS)
+    /// Optional so previews and tests work without the app injecting it.
+    @Environment(WindowNavigation.self) private var navigation: WindowNavigation?
+    #endif
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -29,6 +33,18 @@ struct MainTabView: View {
                 .padding(.bottom, 22)
         }
         .background(Color.eggshell.ignoresSafeArea())
+        #if os(macOS)
+        // ⌘1/⌘2/⌘3 arrive through `WindowNavigation`; clicks on the capsule
+        // bar are reported back so the Go menu's checkmark follows.
+        .onAppear { if let tab = navigation?.selectedTab { selectedTab = tab } }
+        .onChange(of: navigation?.selectedTab) { _, tab in
+            guard let tab, tab != selectedTab else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
+        }
+        .onChange(of: selectedTab) { _, tab in
+            if navigation?.selectedTab != tab { navigation?.selectedTab = tab }
+        }
+        #endif
     }
 }
 
