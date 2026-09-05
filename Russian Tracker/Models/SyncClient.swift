@@ -111,7 +111,8 @@ final class SyncClient {
         self.suite = suite
         client = SupabaseClient(
             supabaseURL: SupabaseConfig.url,
-            supabaseKey: SupabaseConfig.publishableKey
+            supabaseKey: SupabaseConfig.publishableKey,
+            options: .init(auth: .init(emitLocalSessionAsInitialSession: true))
         )
         if let at = suite.object(forKey: TimerKey.syncLastPulledAt) as? Date {
             lastSyncAt = at
