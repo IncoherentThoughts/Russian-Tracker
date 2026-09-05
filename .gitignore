@@ -1,0 +1,79 @@
+# ── Xcode ────────────────────────────────────────────────────────────────────
+
+# Per-user UI state (open tabs, scroll position, breakpoints)
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+DerivedData/
+build/
+*.o
+*.d
+
+# Xcode legacy
+*.moved-aside
+*.xccheckout
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Swift Package Manager ─────────────────────────────────────────────────────
+
+.build/
+.swiftpm/
+*.resolved
+
+# ── AI / Vibe Coding tools ───────────────────────────────────────────────────
+
+# Claude Code
+.claude/settings.local.json
+.claude/skills/
+
+# All other AI coding assistant config directories
+.adal/
+.agent/
+.agents/
+.augment/
+.codebuddy/
+.commandcode/
+.continue/
+.crush/
+.factory/
+.goose/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+
+# Generic skills directories (root-level, not tool-specific)
+skills/
+skills-lock.json
+
+# ── Misc project files not for version control ────────────────────────────────
+
+# Lighthouse audit outputs
+Lighthouse.txt
+Lighthouse_After.txt
+Network.txt
+Supabase.txt
+
+# Reference design images (not shipped in app bundle)
+Examples/
+
+# Coverage residue from xcodebuild test
+*.profraw
