@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(TimerManager.self) private var timer
     @Environment(StudyStore.self) private var store
+    @Environment(SyncClient.self) private var sync
 
     @State private var showResetDailyAlert = false
     @State private var showResetTotalAlert1 = false
@@ -107,8 +108,8 @@ struct SettingsView: View {
             SettingsDivider()
             // The one place sync status appears. Muted on purpose: trust needs
             // somewhere to check, the Timer screen stays silent.
-            SettingsRow(icon: "icloud", label: "Sync") {
-                Text(store.syncStatusText)
+            SettingsRow(icon: "arrow.triangle.2.circlepath", label: "Sync") {
+                Text(sync.statusText)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundColor(.bronzeMuted)
                     .lineLimit(1)
@@ -142,6 +143,7 @@ struct SettingsView: View {
                 KeyboardShortcutsSection()
                 #endif
                 advancedGroup
+                SyncSection()
                 backupGroup
                 aboutGroup
             }
@@ -178,7 +180,7 @@ struct SettingsView: View {
             .alert("This Cannot Be Undone", isPresented: $showResetTotalAlert2) {
                 Button("Reset Everything", role: .destructive) {
                     timer.resetTotal()
-                    store.deleteAllSessions()
+                    store.resetAllSessionsEverywhere()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -254,7 +256,7 @@ struct SettingsView: View {
 
 // MARK: - Settings primitives
 
-private struct SettingsGroupView<Content: View>: View {
+struct SettingsGroupView<Content: View>: View {
     var label: String? = nil
     @ViewBuilder let content: () -> Content
 
@@ -281,7 +283,7 @@ private struct SettingsGroupView<Content: View>: View {
     }
 }
 
-private struct SettingsDivider: View {
+struct SettingsDivider: View {
     var body: some View {
         Rectangle()
             .fill(Color.hairline)
@@ -290,7 +292,7 @@ private struct SettingsDivider: View {
     }
 }
 
-private struct SettingsRow<Trailing: View>: View {
+struct SettingsRow<Trailing: View>: View {
     let icon: String
     var iconWeight: Font.Weight = .regular
     let label: String

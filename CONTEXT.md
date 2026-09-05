@@ -43,3 +43,6 @@ The panel opened by clicking the Menu Bar Item: today's time, all-time total, St
 
 ## Widget
 The Mac Notification Center widget (small and medium). Interactive: Start/Pause and Study Type switching without opening the app.
+
+**Account**
+The email identity that owns one shared Clock and its Sessions. Every device signs into the same Account once; sync happens between devices on the same Account.

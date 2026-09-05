@@ -7,7 +7,7 @@ Date: 2026-09-05. Vocabulary: see `CONTEXT.md`. Decisions: `docs/adr/0001`, `doc
 | Area | Decision |
 |---|---|
 | Clock | One shared Clock per Apple ID. Later Clock Action wins. |
-| Transport | CloudKit via SwiftData. Clock State is one synced record. |
+| Transport | Supabase (Postgres + Realtime + Auth), see ADR 0003. CloudKit dropped: personal team, no iCloud. |
 | Totals | Derived from Sessions plus today. No stored counters. |
 | Rollover | Idempotent; first device to see a stale Study Day performs it. |
 | Offline | Silent. One muted sync line in Settings. |
@@ -167,3 +167,18 @@ Docs: update `CLAUDE.md` (macOS section, storage keys, derived totals) and `READ
 | 6 Verification/docs | all | 1 day |
 
 Phases 3–5 can proceed in parallel with 1–2 since they only consume `TimerManager`'s existing API.
+
+---
+
+## Phase 7 — Supabase transport (replaces Phase 2's CloudKit) 
+
+Decisions: ADR 0003. Sign-in = email + one-time code, once per device. First device uploads; later devices merge.
+
+1. Remove CloudKit: `ClockState` model, CloudKit container config, `NSPersistentStoreRemoteChange` observer, iCloud/push entitlements, `RT_CLOUDKIT` switch, `remote-notification` background mode.
+2. Add `supabase-swift` (SPM) to the app target. `Models/SupabaseConfig.swift` holds the URL and publishable key.
+3. `Models/SyncClient.swift`: auth (send code, verify, sign out, session listener), `pull()` (clock merge + Session reconcile), `flush()` (dirty clock, `needsUpload` Sessions, pending delete-all) with retry, Realtime subscription on `clock_state` and `sessions`. Pure `SessionSyncPlan.make(...)` decides reconcile actions (tested).
+4. `StudySession.needsUpload`; `StudyStore` gains `applyRemoteSession`, `reconcileSessions`, and forwards changes to the client. `syncStatusText` moves to the client.
+5. Settings: a Sync group (email → code → signed in; status line; Sign out). Global reset copy unchanged.
+6. Database migration (pasted into the Supabase SQL editor): tables, RLS policies, Realtime publication, `replica identity full` on `sessions` so deletes carry the date.
+
+Exit: same as Phase 2's — start on phone → Mac follows; pause on Mac → phone follows on foreground; Q10 offline conflict; global reset; backup import wins.

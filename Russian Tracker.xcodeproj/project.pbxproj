@@ -12,6 +12,7 @@
 		FA73112C2F52A42600E4A16C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA73112B2F52A42600E4A16C /* SwiftUI.framework */; };
 		FA7311392F52A42700E4A16C /* Russian Timer WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FA7311272F52A42600E4A16C /* Russian Timer WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		KS0000000000000000000001 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = KS0000000000000000000002 /* KeyboardShortcuts */; };
+		SB0000000000000000000001 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = SB0000000000000000000002 /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,6 +131,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				KS0000000000000000000001 /* KeyboardShortcuts in Frameworks */,
+				SB0000000000000000000001 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,6 +232,7 @@
 			name = "Russian Tracker";
 			packageProductDependencies = (
 				KS0000000000000000000002 /* KeyboardShortcuts */,
+				SB0000000000000000000002 /* Supabase */,
 			);
 			productName = "Russian Tracker";
 			productReference = FAA686DB2F52427900481D93 /* Russian Tracker.app */;
@@ -318,6 +321,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				SB0000000000000000000003 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FAA686DC2F52427900481D93 /* Products */;
@@ -617,16 +621,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "$(RT_ENTITLEMENTS_$(RT_CLOUDKIT))";
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "$(RT_MAC_ENTITLEMENTS_$(RT_CLOUDKIT))";
-				RT_CLOUDKIT = NO;
-				RT_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.entitlements";
-				RT_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.entitlements";
-				RT_MAC_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.macOS.entitlements";
-				RT_MAC_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.macOS.entitlements";
-				RT_SWIFT_NO = "";
-				RT_SWIFT_YES = CLOUDKIT_SYNC;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(RT_SWIFT_$(RT_CLOUDKIT))";
+				CODE_SIGN_ENTITLEMENTS = "Russian Tracker/Russian Tracker.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Russian Tracker/Russian Tracker.macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -673,16 +669,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "$(RT_ENTITLEMENTS_$(RT_CLOUDKIT))";
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "$(RT_MAC_ENTITLEMENTS_$(RT_CLOUDKIT))";
-				RT_CLOUDKIT = NO;
-				RT_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.entitlements";
-				RT_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.entitlements";
-				RT_MAC_ENTITLEMENTS_NO = "Russian Tracker/Russian Tracker.local.macOS.entitlements";
-				RT_MAC_ENTITLEMENTS_YES = "Russian Tracker/Russian Tracker.macOS.entitlements";
-				RT_SWIFT_NO = "";
-				RT_SWIFT_YES = CLOUDKIT_SYNC;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(RT_SWIFT_$(RT_CLOUDKIT))";
+				CODE_SIGN_ENTITLEMENTS = "Russian Tracker/Russian Tracker.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Russian Tracker/Russian Tracker.macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -877,6 +865,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		SB0000000000000000000003 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -884,6 +880,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = KS0000000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		SB0000000000000000000002 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = SB0000000000000000000003 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

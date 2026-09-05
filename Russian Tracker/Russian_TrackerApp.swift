@@ -40,6 +40,7 @@ struct Russian_TrackerApp: App {
             MainTabView()
                 .environment(services.timer)
                 .environment(services.store)
+                .environment(services.sync)
                 .preferredColorScheme(.light)
         }
         .modelContainer(services.container)
@@ -53,8 +54,10 @@ struct Russian_TrackerApp: App {
         switch phase {
         case .active:
             services.timer.onForeground()
+            services.sync.resume()
         case .background, .inactive:
             services.timer.onBackground()
+            services.sync.suspend()
         @unknown default:
             break
         }
@@ -87,6 +90,7 @@ private extension Russian_TrackerApp {
                 .frame(width: 420, height: 780)
                 .environment(services.timer)
                 .environment(services.store)
+                .environment(services.sync)
                 .environment(navigation)
                 .preferredColorScheme(.light)
                 .onAppear {
@@ -125,88 +129,38 @@ private extension Russian_TrackerApp {
 }
 #endif
 
-/// Builds the model container and wires the timer, the store, and sync
-/// together once, before the first scene appears.
-///
-/// The container uses the private CloudKit database (ADR 0001). If that is
-/// unavailable — no iCloud entitlement on this build — it falls back to the
-/// same local store without sync, so the app keeps working and the sync line
-/// in Settings says why.
+/// Builds the model container and wires the timer, the store and the sync
+/// client together once, before the first scene appears (ADR 0003).
 @MainActor
 final class AppServices {
     let container: ModelContainer
     let timer: TimerManager
     let store: StudyStore
+    let sync: SyncClient
 
     init() {
-        let schema = Schema([StudySession.self, ClockState.self])
-        // CloudKit traps (it does not throw) when the process lacks the iCloud
-        // entitlement, so the choice is made up front rather than by catching.
-        var cloudEnabled = Self.hasICloudEntitlement
-        var built: ModelContainer?
-        if cloudEnabled {
-            let cloud = ModelConfiguration(
-                schema: schema,
-                cloudKitDatabase: .private(cloudKitContainerID)
-            )
-            do {
-                built = try ModelContainer(for: schema, configurations: [cloud])
-            } catch {
-                print("[Sync] CloudKit container unavailable, using local store: \(error)")
-                cloudEnabled = false
-            }
+        let schema = Schema([StudySession.self])
+        do {
+            container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema)])
+        } catch {
+            fatalError("Could not open the local store: \(error)")
         }
-        if built == nil {
-            let local = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
-            do {
-                built = try ModelContainer(for: schema, configurations: [local])
-            } catch {
-                fatalError("Could not open the local store: \(error)")
-            }
-        }
-        guard let built else { fatalError("unreachable") }
-        container = built
         timer = TimerManager()
         store = StudyStore()
+        sync = SyncClient(suite: UserDefaults(suiteName: appGroupSuite) ?? .standard)
         store.modelContext = container.mainContext
-        store.cloudSyncEnabled = cloudEnabled
         store.timer = timer
+        store.sync = sync
+        sync.timer = timer
+        sync.store = store
 
         timer.persistSession = { [weak store] date, duration, breakdown in
             store?.upsertSession(date: date, duration: duration, breakdown: breakdown)
         }
-        timer.onStateChanged = { [weak store] snapshot in
-            store?.saveClock(snapshot)
-        }
-        // The synced record may be newer than the suite (a remote change
-        // imported while the app was not running).
-        if let synced = store.loadClock() {
-            timer.adopt(synced, notify: true)
-        } else {
-            store.saveClock(timer.snapshot)
+        timer.onStateChanged = { [weak sync] _ in
+            sync?.clockChanged()
         }
         store.dedupeSessions()
-        store.startObservingRemoteChanges()
-    }
-
-    /// Whether this build carries the iCloud entitlement. Controlled by the
-    /// `RT_CLOUDKIT` build setting (YES selects the `.entitlements` files with
-    /// iCloud + push and defines `CLOUDKIT_SYNC`; NO selects the `.local`
-    /// variants). Personal developer teams cannot sign iCloud, so NO is the
-    /// default until the paid program is active. On macOS the signed
-    /// entitlement is double-checked because CloudKit traps without it.
-    static var hasICloudEntitlement: Bool {
-        #if !CLOUDKIT_SYNC
-        return false
-        #elseif os(macOS)
-        guard let task = SecTaskCreateFromSelf(nil) else { return false }
-        let value = SecTaskCopyValueForEntitlement(
-            task, "com.apple.developer.icloud-services" as CFString, nil
-        )
-        return value != nil
-        #else
-        // iOS builds are always signed by Xcode, entitlements included.
-        return true
-        #endif
+        sync.start()
     }
 }

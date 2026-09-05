@@ -1,9 +1,8 @@
 import Foundation
 import SwiftData
 
-/// One Session per Study Day. Every property has a default and nothing is
-/// unique, as CloudKit requires; the one-per-day rule is kept by
-/// `StudyStore.dedupeSessions()` instead, using `updatedAt` (later wins).
+/// One Session per Study Day. The one-per-day rule is kept by
+/// `StudyStore.dedupeSessions()`, using `updatedAt` (later wins).
 @Model
 final class StudySession {
     var date: Date = Date.distantPast   // normalized to midnight (start of day)
@@ -11,6 +10,9 @@ final class StudySession {
     var isManualEdit: Bool = false      // true if user manually edited this entry
     /// When this record was last written. Resolves duplicates after a merge.
     var updatedAt: Date = Date.distantPast
+    /// True until the row has reached the Account's server copy (ADR 0003).
+    /// Locally created Sessions start true; `StudyStore.applyRemote` clears it.
+    var needsUpload: Bool = true
 
     // Per-type breakdown of `duration`.
     //

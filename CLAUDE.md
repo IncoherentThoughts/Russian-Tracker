@@ -271,7 +271,7 @@ class StudySession {
 ## Stretch Goals (Post-MVP)
 
 - [ ] Apple Watch complication (mirrors Live Activity display)
-- [x] iCloud sync via CloudKit so stats persist across devices (ADR 0001)
+- [x] Cross-device sync so stats persist across devices (Supabase, ADR 0003)
 - [ ] Daily study goal setting with notification reminder
 - [ ] Export study data as CSV
 - [x] macOS menu bar mini-timer
@@ -334,4 +334,4 @@ The app should feel **invisible and frictionless** when in use. A user mid-sessi
 
 5. **One job per screen.** The Timer screen does one thing: track. Settings does one thing: configure. Stats does one thing: reflect. Nothing bleeds across. No upsells, tips, or cross-screen nudges.
 
-*Last updated: 2026-09-05 — Mac app, CloudKit sync, hotkeys, widget (see docs/plans/2026-09-05-mac-app-and-sync.md).*
+*Last updated: 2026-09-05 — Mac app, Supabase sync, hotkeys, widget (see docs/plans/2026-09-05-mac-app-and-sync.md).*

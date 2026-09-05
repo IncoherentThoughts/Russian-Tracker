@@ -3,10 +3,6 @@ import Foundation
 /// Shared across the main app target and the widget extension target.
 let appGroupSuite = "group.evan.russiantimer"
 
-/// The CloudKit container that carries the Clock State and Sessions between
-/// devices (ADR 0001). Must match the iCloud entitlement on every target.
-let cloudKitContainerID = "iCloud.com.evan.russiantracker"
-
 /// Idle timeout for the Live Activity. After this many seconds without
 /// engagement (start/pause, app foreground, or Lock Screen button tap) the
 /// activity auto-dismisses. Shared so the app and widget intent agree.
@@ -52,8 +48,8 @@ nonisolated enum StudyType: String, CaseIterable, Codable, Hashable, Identifiabl
 /// These are read by three separate processes — the app, the widget extension,
 /// and the intents the system dispatches from the Lock Screen — so the names
 /// live here rather than being duplicated per process. The suite is the local
-/// cache of the Clock State (see `ClockSnapshot`); the synced copy is the
-/// `ClockState` record.
+/// cache of the Clock State (see `ClockSnapshot`); the synced copy lives in
+/// Supabase (ADR 0003).
 nonisolated enum TimerKey {
     static let dailyElapsed     = "dailyElapsed"
     static let timerRunning     = "timerRunning"
@@ -65,6 +61,14 @@ nonisolated enum TimerKey {
     static let lastActionDevice = "lastActionDevice"
     static let deviceID         = "deviceID"
     static let pendingSessions  = "pendingSessions"
+
+    /// Sync bookkeeping (ADR 0003): the Clock has changes not yet uploaded,
+    /// a global reset is waiting to reach the server, and which Account has
+    /// already received this device's initial upload.
+    static let syncClockDirty       = "syncClockDirty"
+    static let syncPendingDeleteAll = "syncPendingDeleteAll"
+    static let syncUploadedFor      = "syncUploadedFor"
+    static let syncLastPulledAt     = "syncLastPulledAt"
 
     /// Sum of every Session before the current Study Day, cached by the app
     /// so the widgets and intents can show an All-Time Total without SwiftData.

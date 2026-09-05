@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import CoreData
 
 // MARK: - Backup data types (shared encoding contract for export/import)
 
@@ -65,6 +64,7 @@ final class StudyStore {
             existing.duration = duration
             existing.isManualEdit = isManual
             existing.updatedAt = Date()
+            existing.needsUpload = true
             Self.apply(breakdown, to: existing, total: duration)
         } else {
             let session = StudySession(date: normalized, duration: duration, isManualEdit: isManual)
@@ -77,6 +77,7 @@ final class StudyStore {
             print("StudyStore: save failed — \(error)")
         }
         refreshPastTotals()
+        sync?.sessionsChanged()
     }
 
     /// Writes `breakdown` onto `session`, or clamps its existing typed values
@@ -122,107 +123,73 @@ final class StudyStore {
         return try? context.fetch(descriptor).first
     }
 
-    // MARK: - Clock record (synced Clock State)
+    // MARK: - Sync (ADR 0003)
 
     /// The `TimerManager` whose derived totals this store keeps current.
     weak var timer: TimerManager?
 
-    /// The single synced Clock State record, created on first use. If a
-    /// first sync between two devices left more than one, the record with the
-    /// latest action is kept and the others removed.
-    func clockRecord() -> ClockState? {
-        guard let context = modelContext else { return nil }
-        let all = (try? context.fetch(FetchDescriptor<ClockState>())) ?? []
-        guard let winner = all.max(by: { $0.lastActionAt < $1.lastActionAt }) else {
-            let fresh = ClockState()
+    /// The Account's wire. Told about every local write; feeds remote rows
+    /// back through `applyRemote` and `deleteSession`.
+    weak var sync: SyncClient?
+
+    /// Every Session, oldest first.
+    func allSessions() -> [StudySession] { fetchAllSessions() }
+
+    func sessionsNeedingUpload() -> [StudySession] {
+        fetchAllSessions().filter { $0.needsUpload }
+    }
+
+    func markUploaded(_ sessions: [StudySession]) {
+        for s in sessions { s.needsUpload = false }
+        try? modelContext?.save()
+    }
+
+    func markNeedsUpload(dates: Set<Date>) {
+        guard !dates.isEmpty else { return }
+        for s in fetchAllSessions() where dates.contains(s.date) {
+            s.needsUpload = true
+        }
+        try? modelContext?.save()
+    }
+
+    /// Install a server row, unless the local copy is newer. Never marks the
+    /// row for upload: it just came from there.
+    func applyRemote(_ row: SessionRow) {
+        guard let context = modelContext, let day = row.day else { return }
+        let descriptor = FetchDescriptor<StudySession>(predicate: #Predicate { $0.date == day })
+        let existing = try? context.fetch(descriptor).first
+        if let existing, existing.updatedAt > row.updatedAt { return }
+        let session = existing ?? {
+            let fresh = StudySession(date: day, duration: row.duration, isManualEdit: row.is_manual_edit)
             context.insert(fresh)
             return fresh
+        }()
+        session.duration = row.duration
+        session.isManualEdit = row.is_manual_edit
+        for type in StudyType.allCases {
+            session.setDuration(max(0, row.breakdown[type] ?? 0), for: type)
         }
-        for loser in all where loser !== winner {
-            context.delete(loser)
-        }
-        return winner
+        session.updatedAt = row.updatedAt
+        session.needsUpload = false
+        try? context.save()
     }
 
-    /// Mirror the in-memory Clock State into the synced record.
-    func saveClock(_ snapshot: ClockSnapshot) {
-        guard let context = modelContext, let record = clockRecord() else { return }
-        if record.snapshot != snapshot {
-            record.apply(snapshot)
-            try? context.save()
+    /// Remove the Session for `date`. With `unlessPending`, a copy that still
+    /// waits to upload is kept (it will reach the server on the next flush).
+    func deleteSession(on date: Date, unlessPending: Bool = false) {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<StudySession>(predicate: #Predicate { $0.date == date })
+        for s in (try? context.fetch(descriptor)) ?? [] {
+            if unlessPending, s.needsUpload { continue }
+            context.delete(s)
         }
+        try? context.save()
     }
 
-    /// The synced Clock State, if a record exists.
-    func loadClock() -> ClockSnapshot? {
-        clockRecord()?.snapshot
-    }
-
-    // MARK: - Sync (CloudKit via SwiftData)
-
-    /// False when the container had to fall back to a local-only store.
-    var cloudSyncEnabled = false
-
-    /// When the store last reported a change that was not ours.
-    private(set) var lastRemoteChangeAt: Date?
-
-    /// Whether this device is signed into iCloud at all.
-    var iCloudSignedIn: Bool {
-        FileManager.default.ubiquityIdentityToken != nil
-    }
-
-    /// One muted line for Settings: the only place sync status appears.
-    var syncStatusText: String {
-        guard cloudSyncEnabled else { return "iCloud · unavailable on this build" }
-        guard iCloudSignedIn else { return "iCloud · not signed in" }
-        guard let at = lastRemoteChangeAt else { return "iCloud · waiting for first sync" }
-        let rel = RelativeDateTimeFormatter()
-        rel.unitsStyle = .short
-        return "iCloud · synced \(rel.localizedString(for: at, relativeTo: Date()))"
-    }
-
-    @ObservationIgnored private var remoteChangeObserver: (any NSObjectProtocol)?
-    @ObservationIgnored private var remoteChangeTask: Task<Void, Never>?
-
-    /// Listen for store changes. CloudKit imports and our own saves both post
-    /// this; the handler is idempotent so it does not matter which it was.
-    func startObservingRemoteChanges() {
-        guard remoteChangeObserver == nil else { return }
-        remoteChangeObserver = NotificationCenter.default.addObserver(
-            forName: .NSPersistentStoreRemoteChange,
-            object: nil,
-            queue: nil
-        ) { [weak self] _ in
-            Task { @MainActor in self?.scheduleRemoteReconcile() }
-        }
-    }
-
-    /// Coalesce bursts of notifications (an import touches many rows) into
-    /// one reconcile shortly after the last one.
-    private func scheduleRemoteReconcile() {
-        remoteChangeTask?.cancel()
-        remoteChangeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            self?.handleRemoteChange()
-        }
-    }
-
-    /// Adopt whatever arrived: the Clock State by the last-action-wins rule,
-    /// then Sessions by de-duplication. The timer re-persists today from the
-    /// winning state, so the two can never disagree.
-    func handleRemoteChange() {
-        guard let timer else { return }
-        let before = timer.snapshot
-        if let synced = loadClock() {
-            timer.adopt(synced, notify: false)
-        }
-        dedupeSessions()
-        if timer.snapshot != before {
-            lastRemoteChangeAt = Date()
-        } else if lastRemoteChangeAt == nil, cloudSyncEnabled, iCloudSignedIn {
-            lastRemoteChangeAt = Date()
-        }
+    /// The global reset: every Session here and on the Account's server copy.
+    func resetAllSessionsEverywhere() {
+        deleteAllSessions()
+        sync?.deleteAllRemote()
     }
 
     // MARK: - Derived totals (ADR 0002)
@@ -336,7 +303,7 @@ final class StudyStore {
 
         if timer.isRunning { timer.pause() }
 
-        deleteAllSessions()
+        resetAllSessionsEverywhere()
         guard let context = modelContext else { return }
         for s in backup.sessions {
             context.insert(StudySession(
@@ -366,6 +333,7 @@ final class StudyStore {
         restored.lastActionAt = Date()
         timer.adopt(restored, notify: true)
         refreshPastTotals()
+        sync?.sessionsChanged()
     }
 
     // MARK: - Private helpers

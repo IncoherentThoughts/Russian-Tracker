@@ -10,7 +10,7 @@ import ActivityKit
 /// The state itself is a `ClockSnapshot`. After each action the manager
 /// writes it to the app-group suite (for intents and widgets), persists
 /// today's Session, and hands the snapshot to `onStateChanged` so the app can
-/// mirror it into the synced `ClockState` record.
+/// upload it (ADR 0003).
 ///
 /// All-time figures are derived (ADR 0002): `pastTotal` is the cached sum of
 /// every Session before the current Study Day, refreshed by `StudyStore`.
@@ -35,8 +35,7 @@ final class TimerManager {
         didSet { drainPendingSessions() }
     }
 
-    /// Called after every Clock Action with the new state. The app mirrors it
-    /// into the synced record and refreshes widgets.
+    /// Called after every Clock Action with the new state. The app uploads it.
     var onStateChanged: ((ClockSnapshot) -> Void)?
 
     // MARK: - Private

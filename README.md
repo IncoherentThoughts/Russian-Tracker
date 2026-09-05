@@ -44,10 +44,10 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 - App Shortcuts for Siri and the Shortcuts app: Start, Pause, Toggle, Set Study Type
 
 ### Cross-device sync
-- One shared Clock per Apple ID over iCloud (CloudKit private database via SwiftData)
+- One shared Clock per Account (an email, signed in once per device with a one-time code) over Supabase
 - Start on one device, pause on another; the later action wins
 - Sessions and the daily goal sync; all-time totals are derived from sessions
-- Works offline; Settings shows one muted sync status line
+- Works offline and catches up; Settings shows one muted sync status line
 
 ---
 
@@ -60,7 +60,7 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 | Persistence | SwiftData (session history) + shared UserDefaults (timer state) |
 | Charts | Swift Charts (native, no third-party libraries) |
 | Live Activity | ActivityKit + AppIntents (`ToggleTimerIntent`) |
-| Sync | SwiftData + CloudKit (`iCloud.com.evan.russiantracker`) |
+| Sync | Supabase (Postgres + Realtime + Auth) via `supabase-swift` |
 | Widgets | WidgetKit timeline widget + Control Center control |
 | Mac hotkeys | [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (SPM) |
 | Minimum target | iOS 17.6, macOS 15 |
@@ -106,7 +106,7 @@ Russian Timer Widget/
 1. Clone the repo and open `Russian Tracker.xcodeproj` in Xcode.
 2. Set your development team in **Signing & Capabilities** for both the `Russian Tracker` and `Russian Timer Widget` targets.
 3. Verify the App Group `group.evan.russiantimer` is configured in **Signing & Capabilities** for both targets.
-4. Sync is off by default because personal (free) developer teams cannot sign iCloud or push. To turn it on once the paid Apple Developer Program is active, set the build setting `RT_CLOUDKIT` to `YES` on the `Russian Tracker` target. That selects the entitlements files with iCloud (container `iCloud.com.evan.russiantracker`) and push, and defines `CLOUDKIT_SYNC`. With `NO` the app runs local-only and Settings shows "iCloud · unavailable on this build".
+4. Sync uses a Supabase project (see `docs/adr/0003-supabase-sync-transport.md`). One-time setup: run `docs/supabase/001_sync.sql` in the project's SQL editor, and in Authentication → Email Templates edit the **Magic Link** template so it contains `{{ .Token }}` (the six-digit code). The project URL and publishable key live in `Russian Tracker/Models/SupabaseConfig.swift`.
 5. Build and run on a physical device (iOS 17.6+) or on the Mac (macOS 15+). The Live Activity cannot be tested in Simulator.
 
 > `NSSupportsLiveActivities` is already set to `YES` in the main app's `Info.plist`.
@@ -144,7 +144,7 @@ All colors are defined in `Theme.swift` and referenced by name. No hardcoded hex
 ## Stretch Goals
 
 - [ ] Apple Watch complication mirroring the Live Activity
-- [ ] iCloud sync via CloudKit
+- [x] Cross-device sync (Supabase)
 - [ ] Daily reminder notification
 - [ ] Export study data as CSV
 - [ ] macOS menu bar mini-timer

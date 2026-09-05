@@ -7,7 +7,7 @@ nonisolated let defaultDailyGoal: TimeInterval = 4 * 3600
 ///
 /// This is the one representation every process shares: the app keeps it in
 /// memory, the intents and widgets read and write it through the app-group
-/// suite, and the app mirrors it into the synced `ClockState` record. All
+/// suite, and the app mirrors it to Supabase (ADR 0003). All
 /// Clock Actions are mutating methods here, so the app and the intents cannot
 /// drift apart in how they bank time.
 ///
