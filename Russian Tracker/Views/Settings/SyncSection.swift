@@ -33,7 +33,7 @@ struct SyncSection: View {
 
     @ViewBuilder
     private var signedOutRows: some View {
-        SettingsRow(icon: "envelope", label: "Email") {
+        inputRow(icon: "envelope", label: "Email") {
             field("you@example.com", text: $email, isEmail: true)
         }
         SettingsDivider()
@@ -54,7 +54,7 @@ struct SyncSection: View {
                 .lineLimit(1)
         }
         SettingsDivider()
-        SettingsRow(icon: "number", label: "Code") {
+        inputRow(icon: "number", label: "Code") {
             field("123456", text: $code, isEmail: false)
         }
         SettingsDivider()
@@ -88,6 +88,26 @@ struct SyncSection: View {
             destructive: true,
             action: { Task { await sync.signOut() } }
         )
+    }
+
+    /// Same layout as `SettingsRow`, minus the Button: a disabled button
+    /// disables the text field inside it, which made the email row inert.
+    private func inputRow<Content: View>(
+        icon: String, label: String, @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundColor(.toffeeBrown)
+                .frame(width: 28, height: 28)
+            Text(label)
+                .font(.system(size: 15))
+                .foregroundColor(.toffeeInk)
+            Spacer(minLength: 8)
+            content()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     private func field(_ placeholder: String, text: Binding<String>, isEmail: Bool) -> some View {

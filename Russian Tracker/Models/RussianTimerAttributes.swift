@@ -26,9 +26,15 @@ let timerStateChangedNotification = "group.evan.russiantimer.stateChanged"
 nonisolated enum StudyType: String, CaseIterable, Codable, Hashable, Identifiable {
     case grammar
     case immersion
-    case output
+    case anki
 
     var id: String { rawValue }
+
+    /// Reads a stored raw value, accepting the pre-rename name of `.anki`.
+    init?(stored raw: String) {
+        if raw == "output" { self = .anki; return }
+        self.init(rawValue: raw)
+    }
 
     /// Shown only on the Stats screen. The dots on the Timer screen and the
     /// Live Activity are deliberately unlabeled.
@@ -36,7 +42,7 @@ nonisolated enum StudyType: String, CaseIterable, Codable, Hashable, Identifiabl
         switch self {
         case .grammar:   return "Grammar"
         case .immersion: return "Immersion"
-        case .output:    return "Output"
+        case .anki:    return "Anki"
         }
     }
 }
@@ -93,7 +99,7 @@ nonisolated enum TimerKey {
 extension UserDefaults {
     /// The active study type, defaulting to grammar when unset or unrecognised.
     nonisolated var studyMode: StudyType {
-        get { StudyType(rawValue: string(forKey: TimerKey.currentMode) ?? "") ?? .grammar }
+        get { StudyType(stored: string(forKey: TimerKey.currentMode) ?? "") ?? .grammar }
         set { set(newValue.rawValue, forKey: TimerKey.currentMode) }
     }
 }

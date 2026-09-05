@@ -46,10 +46,10 @@ struct ClockSnapshotTests {
         s.studyDay = day(2026, 9, 5)
         s.start(at: date(2026, 9, 5, 9), device: "a")
         let before = s.daily(at: date(2026, 9, 5, 9, 30))
-        s.setMode(.output, at: date(2026, 9, 5, 9, 30), device: "a")
+        s.setMode(.anki, at: date(2026, 9, 5, 9, 30), device: "a")
         #expect(s.daily(at: date(2026, 9, 5, 9, 30)) == before)
         #expect(s.dailyByType[.grammar] == 1800)
-        #expect(s.daily(for: .output, at: date(2026, 9, 5, 10)) == 1800)
+        #expect(s.daily(for: .anki, at: date(2026, 9, 5, 10)) == 1800)
         #expect(s.isRunning)
     }
 
@@ -137,11 +137,11 @@ struct ClockSnapshotTests {
         var s = ClockSnapshot()
         s.studyDay = day(2026, 9, 5)
         s.dailyBase = 3600
-        s.dailyByType = [.grammar: 3000, .output: 600]
+        s.dailyByType = [.grammar: 3000, .anki: 600]
         s.setManualDaily(1800, at: date(2026, 9, 5, 12), device: "a")
         #expect(s.dailyBase == 1800)
         #expect(s.dailyByType[.grammar] == 1800)
-        #expect(s.dailyByType[.output] == 600)
+        #expect(s.dailyByType[.anki] == 600)
     }
 
     @Test func resetDailyKeepsARunningClockRunningFromNow() {

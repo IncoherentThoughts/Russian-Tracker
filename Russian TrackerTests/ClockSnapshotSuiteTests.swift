@@ -16,9 +16,9 @@ struct ClockSnapshotSuiteTests {
         let suite = freshSuite()
         var s = ClockSnapshot()
         s.studyDay = Calendar.current.startOfDay(for: Date())
-        s.mode = .output
+        s.mode = .anki
         s.dailyBase = 42
-        s.dailyByType = [.output: 42]
+        s.dailyByType = [.anki: 42]
         s.dailyGoal = 7200
         s.start(at: Date(), device: "dev")
         s.write(to: suite)

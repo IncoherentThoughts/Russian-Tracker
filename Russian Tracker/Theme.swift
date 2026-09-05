@@ -83,7 +83,7 @@ extension StudyType {
         switch self {
         case .grammar:   return .rosyCopper
         case .immersion: return .skyDeep
-        case .output:    return .toffeeInk
+        case .anki:    return .toffeeInk
         }
     }
 }

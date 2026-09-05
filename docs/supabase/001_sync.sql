@@ -9,7 +9,7 @@ create table public.clock_state (
   daily_base         double precision not null default 0,
   daily_grammar      double precision not null default 0,
   daily_immersion    double precision not null default 0,
-  daily_output       double precision not null default 0,
+  daily_anki         double precision not null default 0,
   daily_goal         double precision not null default 14400,
   last_action_at     timestamptz      not null default '1970-01-01',
   last_action_device text             not null default '',
@@ -22,7 +22,7 @@ create table public.sessions (
   duration       double precision not null default 0,
   grammar        double precision not null default 0,
   immersion      double precision not null default 0,
-  output         double precision not null default 0,
+  anki           double precision not null default 0,
   is_manual_edit boolean          not null default false,
   updated_at     timestamptz      not null default now(),
   primary key (user_id, date)

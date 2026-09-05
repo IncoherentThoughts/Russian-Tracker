@@ -118,7 +118,7 @@ struct TotalRingChart: View {
         byType: [
             (.grammar, 62 * 3600),
             (.immersion, 87 * 3600),
-            (.output, 24 * 3600),
+            (.anki, 24 * 3600),
         ]
     )
     .padding()

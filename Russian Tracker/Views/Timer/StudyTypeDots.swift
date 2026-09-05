@@ -80,7 +80,7 @@ struct StudyTypeDots: View {
     VStack(spacing: 24) {
         StudyTypeDots(selected: .grammar) { _ in }
         StudyTypeDots(selected: .immersion) { _ in }
-        StudyTypeDots(selected: .output) { _ in }
+        StudyTypeDots(selected: .anki) { _ in }
     }
     .padding(40)
     .background(Color.eggshell)

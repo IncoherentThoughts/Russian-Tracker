@@ -102,7 +102,7 @@ nonisolated extension StudyType: AppEnum {
         [
             .grammar:   "Grammar",
             .immersion: "Immersion",
-            .output:    "Output",
+            .anki:    "Anki",
         ]
     }
 }

@@ -21,7 +21,41 @@ private struct SessionBackup: Codable {
     let isManualEdit: Bool
     var grammarDuration: TimeInterval?
     var immersionDuration: TimeInterval?
-    var outputDuration: TimeInterval?
+    var ankiDuration: TimeInterval?
+
+    private enum CodingKeys: String, CodingKey {
+        case date, duration, isManualEdit, grammarDuration, immersionDuration, ankiDuration
+        /// Pre-rename backups.
+        case outputDuration
+    }
+
+    init(date: Date, duration: TimeInterval, isManualEdit: Bool,
+         grammarDuration: TimeInterval?, immersionDuration: TimeInterval?, ankiDuration: TimeInterval?) {
+        self.date = date; self.duration = duration; self.isManualEdit = isManualEdit
+        self.grammarDuration = grammarDuration; self.immersionDuration = immersionDuration
+        self.ankiDuration = ankiDuration
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(Date.self, forKey: .date)
+        duration = try c.decode(TimeInterval.self, forKey: .duration)
+        isManualEdit = try c.decode(Bool.self, forKey: .isManualEdit)
+        grammarDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .grammarDuration)
+        immersionDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .immersionDuration)
+        ankiDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .ankiDuration)
+            ?? c.decodeIfPresent(TimeInterval.self, forKey: .outputDuration)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(date, forKey: .date)
+        try c.encode(duration, forKey: .duration)
+        try c.encode(isManualEdit, forKey: .isManualEdit)
+        try c.encodeIfPresent(grammarDuration, forKey: .grammarDuration)
+        try c.encodeIfPresent(immersionDuration, forKey: .immersionDuration)
+        try c.encodeIfPresent(ankiDuration, forKey: .ankiDuration)
+    }
 }
 
 /// Bridges SwiftData StudySession records with business logic for charts and stats.
@@ -254,7 +288,7 @@ final class StudyStore {
                     isManualEdit: $0.isManualEdit,
                     grammarDuration: $0.grammarDuration,
                     immersionDuration: $0.immersionDuration,
-                    outputDuration: $0.outputDuration
+                    ankiDuration: $0.ankiDuration
                 )
             },
             dailyByType: Self.rawKeyed(timer.currentDayBreakdown()),
@@ -312,7 +346,7 @@ final class StudyStore {
                 isManualEdit: s.isManualEdit,
                 grammarDuration: s.grammarDuration ?? 0,
                 immersionDuration: s.immersionDuration ?? 0,
-                outputDuration: s.outputDuration ?? 0
+                ankiDuration: s.ankiDuration ?? 0
             ))
         }
         try? context.save()
@@ -324,7 +358,8 @@ final class StudyStore {
         // A pre-study-type backup carries no buckets, in which case they stay
         // empty rather than showing the old app's numbers.
         for type in StudyType.allCases {
-            if let v = backup.dailyByType?[type.rawValue], v > 0 {
+            let key = type == .anki && backup.dailyByType?["anki"] == nil ? "output" : type.rawValue
+            if let v = backup.dailyByType?[key], v > 0 {
                 restored.dailyByType[type] = v
             }
         }

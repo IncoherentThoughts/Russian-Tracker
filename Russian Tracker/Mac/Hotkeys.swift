@@ -10,7 +10,7 @@ extension KeyboardShortcuts.Name {
     /// Switch the Study Type. Defaults ⌥1 / ⌥2 / ⌥3.
     static let setGrammar   = Self("setGrammar",   default: .init(.one,   modifiers: [.option]))
     static let setImmersion = Self("setImmersion", default: .init(.two,   modifiers: [.option]))
-    static let setOutput    = Self("setOutput",    default: .init(.three, modifiers: [.option]))
+    static let setAnki    = Self("setAnki",    default: .init(.three, modifiers: [.option]))
 }
 
 // MARK: - Global hotkeys
@@ -40,8 +40,8 @@ enum Hotkeys {
         KeyboardShortcuts.onKeyDown(for: .setImmersion) { [weak timer] in
             timer?.setMode(.immersion)
         }
-        KeyboardShortcuts.onKeyDown(for: .setOutput) { [weak timer] in
-            timer?.setMode(.output)
+        KeyboardShortcuts.onKeyDown(for: .setAnki) { [weak timer] in
+            timer?.setMode(.anki)
         }
     }
 }

@@ -114,7 +114,7 @@ struct HeatmapCell: View {
     let today = calendar.startOfDay(for: Date())
     let monthInterval = calendar.dateInterval(of: .month, for: today)!
     let days = calendar.dateComponents([.day], from: monthInterval.start, to: monthInterval.end).day ?? 28
-    let types: [StudyType?] = [.grammar, .immersion, .output, nil]
+    let types: [StudyType?] = [.grammar, .immersion, .anki, nil]
     let data = (0..<days).map { offset -> (date: Date, duration: TimeInterval, dominantType: StudyType?) in
         let date = calendar.date(byAdding: .day, value: offset, to: monthInterval.start)!
         return (date, TimeInterval.random(in: 0...10000), types[offset % types.count])

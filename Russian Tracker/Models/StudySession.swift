@@ -20,12 +20,15 @@ final class StudySession {
     // (streak, average, best day, the bar and line charts) reads it and is
     // unaffected by types. These three are an additional dimension underneath.
     //
-    // Invariant: grammar + immersion + output <= duration. The two are equal
+    // Invariant: grammar + immersion + anki <= duration. The two are equal
     // for a day recorded entirely by the timer; a manual edit raises `duration`
     // without attributing the difference to any type, which is why the ring can
     // legitimately show fewer hours than the all-time total.
     var grammarDuration: TimeInterval = 0
     var immersionDuration: TimeInterval = 0
+    /// Stored under its pre-rename name: renaming a persisted property would
+    /// force a store migration, which Core Data refuses on stores that were
+    /// ever opened with CloudKit. Code uses `ankiDuration`.
     var outputDuration: TimeInterval = 0
 
     init(
@@ -34,19 +37,25 @@ final class StudySession {
         isManualEdit: Bool = false,
         grammarDuration: TimeInterval = 0,
         immersionDuration: TimeInterval = 0,
-        outputDuration: TimeInterval = 0
+        ankiDuration: TimeInterval = 0
     ) {
         self.date = Calendar.current.startOfDay(for: date)
         self.duration = duration
         self.isManualEdit = isManualEdit
         self.grammarDuration = grammarDuration
         self.immersionDuration = immersionDuration
-        self.outputDuration = outputDuration
+        self.outputDuration = ankiDuration
         self.updatedAt = Date()
     }
 }
 
 extension StudySession {
+    /// Seconds credited to Anki. See `outputDuration` for why the name differs.
+    var ankiDuration: TimeInterval {
+        get { outputDuration }
+        set { outputDuration = newValue }
+    }
+
     /// Formats duration as "Xh Ym" for display
     var formattedDuration: String {
         let hours = Int(duration) / 3600
@@ -61,7 +70,7 @@ extension StudySession {
         switch type {
         case .grammar:   return grammarDuration
         case .immersion: return immersionDuration
-        case .output:    return outputDuration
+        case .anki:    return ankiDuration
         }
     }
 
@@ -69,7 +78,7 @@ extension StudySession {
         switch type {
         case .grammar:   grammarDuration = value
         case .immersion: immersionDuration = value
-        case .output:    outputDuration = value
+        case .anki:    ankiDuration = value
         }
     }
 

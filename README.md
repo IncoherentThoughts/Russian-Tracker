@@ -1,6 +1,6 @@
 # Russian Timer
 
-A minimal, distraction-free iOS app for tracking daily and cumulative Russian study time, split across three study types — grammar, immersion, and output. Built for self-directed language learners who want a frictionless way to log hours without any gamification or pressure.
+A minimal, distraction-free iOS app for tracking daily and cumulative Russian study time, split across three study types — grammar, immersion, and Anki. Built for self-directed language learners who want a frictionless way to log hours without any gamification or pressure.
 
 ---
 
@@ -39,7 +39,7 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 ### macOS
 - Menu bar agent: an icon that shows the ticking daily time only while the Clock is running; click for a popover with today, all-time, Start/Pause, Study Type switcher, Daily Goal bar, Open and Quit
 - The full app window (same three screens) opens on demand; closing it returns to the menu bar without quitting
-- Global keyboard shortcuts, recordable in Settings: ⌥0 Start/Pause, ⌥1 Grammar, ⌥2 Immersion, ⌥3 Output
+- Global keyboard shortcuts, recordable in Settings: ⌥0 Start/Pause, ⌥1 Grammar, ⌥2 Immersion, ⌥3 Anki
 - Notification Center widget (small and medium, interactive) and a Control Center toggle
 - App Shortcuts for Siri and the Shortcuts app: Start, Pause, Toggle, Set Study Type
 

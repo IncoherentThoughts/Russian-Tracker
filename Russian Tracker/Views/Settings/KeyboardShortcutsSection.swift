@@ -20,7 +20,7 @@ struct KeyboardShortcutsSection: View {
                 divider
                 shortcutRow(icon: "headphones", label: "Immersion", name: .setImmersion)
                 divider
-                shortcutRow(icon: "pencil.line", label: "Output", name: .setOutput)
+                shortcutRow(icon: "pencil.line", label: "Anki", name: .setAnki)
             }
             .background(
                 RoundedRectangle(cornerRadius: 18)

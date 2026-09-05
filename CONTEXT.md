@@ -21,7 +21,7 @@ The transition from one Study Day to the next at 4:00 AM. The departing Study Da
 The record of one Study Day: its date, total seconds, and the split across Study Types. There is at most one Session per Study Day. Sessions are the history that Stats reads.
 
 ## Study Type
-The kind of study the Clock is currently crediting: Grammar, Immersion, or Output. The Clock is unaffected by the type; the type only decides which bucket its seconds land in. Switching type mid-run splits the run at that instant.
+The kind of study the Clock is currently crediting: Grammar, Immersion, or Anki. The Clock is unaffected by the type; the type only decides which bucket its seconds land in. Switching type mid-run splits the run at that instant.
 
 ## Daily Goal
 The target number of hours per Study Day, set by the user. Drives the progress bar in the Live Activity, the Mac menu bar popover, and the widget. Default four hours.

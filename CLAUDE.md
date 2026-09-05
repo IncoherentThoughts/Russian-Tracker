@@ -10,7 +10,7 @@
 **App Name:** Russian Timer
 **Platforms:** iOS (primary) + macOS (Catalyst or native SwiftUI)
 **Purpose:** A minimal, distraction-free timer for tracking daily and cumulative Russian study time.
-**Target User:** Self-directed Russian language learners who want a frictionless way to track study hours across grammar, immersion, and output practice.
+**Target User:** Self-directed Russian language learners who want a frictionless way to track study hours across grammar, immersion, and Anki practice.
 
 ---
 
@@ -226,7 +226,7 @@ The Mac app is a native SwiftUI build of the same target (`SUPPORTED_PLATFORMS` 
 - **Menu Bar Item**: `book.fill` glyph; the ticking daily elapsed time is appended only while the Clock is running (`Mac/MenuBarPopoverView.swift`). The popover shows today, all-time, Start/Pause, the Study Type dots, the Daily Goal bar, Open, Quit.
 - **Window**: `Window("Russian Tracker", id: "main")`, fixed 420×780, same three screens and capsule tab bar. ⌘1/⌘2/⌘3 select tabs through `WindowNavigation` in the environment.
 - **Rollover**: `Mac/MacRolloverScheduler.swift` fires at the next 4am boundary, on wake, on key-window changes and on clock/time-zone changes, calling `timer.onForeground()`.
-- **Hotkeys**: global and recordable via the `KeyboardShortcuts` package (`Mac/Hotkeys.swift`). Defaults ⌥0 toggle, ⌥1/⌥2/⌥3 = Grammar/Immersion/Output. Feedback is the Menu Bar Item only. Recorder UI in Settings (`Views/Settings/KeyboardShortcutsSection.swift`).
+- **Hotkeys**: global and recordable via the `KeyboardShortcuts` package (`Mac/Hotkeys.swift`). Defaults ⌥0 toggle, ⌥1/⌥2/⌥3 = Grammar/Immersion/Anki. Feedback is the Menu Bar Item only. Recorder UI in Settings (`Views/Settings/KeyboardShortcutsSection.swift`).
 - **Widget**: the widget extension builds for macOS too. `Russian Timer Widget/TimerWidget.swift` is the Notification Center / Home Screen timeline widget (small + medium, interactive). It shows "Open Russian Tracker to sync" on macOS when the app heartbeat (`TimerKey.appHeartbeat`, written every 60 s while running) is older than 3 minutes. `ControlWidget.swift` is the Control Center toggle (iOS 18+, macOS 26+ per the SDK).
 - **No Live Activity on macOS**: all ActivityKit code stays behind `#if os(iOS)`; `ClockIntent` aliases `LiveActivityIntent` on iOS and `AppIntent` on macOS.
 - **App Shortcuts** (both platforms): `Models/AppShortcuts.swift` exposes Start, Pause, Toggle, Set Study Type.
@@ -306,7 +306,7 @@ class StudySession {
 ## Design Context
 
 ### Users
-Self-directed Russian language learners — typically alone, at a desk, on a commute, or with media playing, in long focused sessions. The app is opened briefly to start or pause the timer and pick a study type, then set aside. The primary job-to-be-done is accurate passive tracking, not active engagement. Users return to the stats screen occasionally to feel a sense of progress over months of study, and to see how their time splits across grammar, immersion, and output.
+Self-directed Russian language learners — typically alone, at a desk, on a commute, or with media playing, in long focused sessions. The app is opened briefly to start or pause the timer and pick a study type, then set aside. The primary job-to-be-done is accurate passive tracking, not active engagement. Users return to the stats screen occasionally to feel a sense of progress over months of study, and to see how their time splits across grammar, immersion, and Anki.
 
 ### Brand Personality
 **Three words: Minimal · Warm · Trustworthy**
