@@ -14,16 +14,26 @@ struct MenuBarLabel: View {
 
     var body: some View {
         if timer.isRunning {
-            Label {
-                Text(timer.computedDaily.menuBarFormatted)
-                    .monospacedDigit()
-            } icon: {
+            HStack(spacing: 7) {
                 Image("MenuBarIcon")
+                // Reserve the width of the widest string with this many
+                // digits so the item stays put while the seconds tick;
+                // otherwise every change nudges the neighbouring icons.
+                ZStack(alignment: .leading) {
+                    Text(placeholder(for: timer.computedDaily.menuBarFormatted))
+                        .hidden()
+                    Text(timer.computedDaily.menuBarFormatted)
+                }
+                .monospacedDigit()
             }
-            .labelStyle(.titleAndIcon)
         } else {
             Image("MenuBarIcon")
         }
+    }
+
+    /// Same shape as `text`, every digit replaced by the widest one.
+    private func placeholder(for text: String) -> String {
+        String(text.map { $0.isNumber ? "8" : $0 })
     }
 }
 
