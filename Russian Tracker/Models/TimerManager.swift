@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 #if os(iOS)
 import ActivityKit
 #endif
@@ -40,6 +41,8 @@ final class TimerManager {
 
     // MARK: - Private
     private var displayTimer: Timer?
+    /// Seconds of display ticks since the last heartbeat (macOS).
+    private var heartbeatTicks = 0
     private let suite: UserDefaults
     private let deviceID: String
     #if os(iOS)
@@ -57,8 +60,10 @@ final class TimerManager {
         }
         performRolloverIfNeeded()
         snapshot.write(to: suite)
+        writeHeartbeat()
         if snapshot.isRunning { startDisplayTimer() }
         registerForStateChanges()
+        refreshWidgets()
     }
 
     deinit {
@@ -155,6 +160,7 @@ final class TimerManager {
         snapshot = merged
         let rolled = performRolloverIfNeeded()
         snapshot.write(to: suite)
+        writeHeartbeat()
         drainPendingSessions()
         syncDisplayTimer()
         persistCurrentDaySession()
@@ -162,6 +168,7 @@ final class TimerManager {
         if (changed || rolled) && notify {
             onStateChanged?(snapshot)
         }
+        refreshWidgets()
         #if os(iOS)
         if changed || rolled { updateLiveActivityInPlace() }
         #endif
@@ -256,6 +263,7 @@ final class TimerManager {
         for type in StudyType.allCases {
             suite.set(byType[type] ?? 0, forKey: TimerKey.pastTotal(type))
         }
+        refreshWidgets()
     }
 
     // MARK: - Private helpers
@@ -263,10 +271,48 @@ final class TimerManager {
     /// Write the state everywhere after a Clock Action.
     private func commit() {
         snapshot.write(to: suite)
+        writeHeartbeat()
         syncDisplayTimer()
         persistCurrentDaySession()
         tick += 1
         onStateChanged?(snapshot)
+        refreshWidgets()
+    }
+
+    // MARK: - Widgets
+
+    /// Ask WidgetKit to re-read the suite. The timeline widget uses
+    /// `.policy(.never)`, so this is the only way it learns about a change;
+    /// the Control Center toggle likewise re-queries its value.
+    private func refreshWidgets() {
+        WidgetCenter.shared.reloadAllTimelines()
+        if #available(iOS 18.0, macOS 26.0, *) {
+            ControlCenter.shared.reloadAllControls()
+        }
+    }
+
+    /// macOS only: stamp the suite so the widget can tell the app is alive.
+    /// A quit Mac app leaves the widget frozen (no Live Activity there), and
+    /// the widget uses this to show "Open Russian Tracker to sync".
+    private func writeHeartbeat() {
+        #if os(macOS)
+        suite.set(Date(), forKey: TimerKey.appHeartbeat)
+        heartbeatTicks = 0
+        #endif
+    }
+
+    /// Called once per second by the display timer while the Clock runs.
+    private func displayTick() {
+        tick += 1
+        #if os(macOS)
+        heartbeatTicks += 1
+        if heartbeatTicks >= 60 {
+            writeHeartbeat()
+            // The widget schedules its stale hint 3 minutes past the last
+            // heartbeat; reloading moves that deadline forward.
+            refreshWidgets()
+        }
+        #endif
     }
 
     /// Runs the Rollover; any departing day is queued for persistence.
@@ -306,7 +352,7 @@ final class TimerManager {
     private func startDisplayTimer() {
         stopDisplayTimer()
         displayTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick += 1 }
+            Task { @MainActor in self?.displayTick() }
         }
     }
 

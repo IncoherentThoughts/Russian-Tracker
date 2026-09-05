@@ -70,6 +70,12 @@ nonisolated enum TimerKey {
     /// so the widgets and intents can show an All-Time Total without SwiftData.
     static let pastTotal        = "pastTotal"
 
+    /// Written by the running Mac app every minute while the Clock is
+    /// running and on every Clock Action. The widget shows its stale hint
+    /// when the Clock is running but this is older than three minutes,
+    /// which means the app that would keep the widget current has quit.
+    static let appHeartbeat     = "appHeartbeat"
+
     /// Pre-sync installs kept the Study Day here; read once for migration.
     static let legacyLastResetDate = "lastResetDate"
 

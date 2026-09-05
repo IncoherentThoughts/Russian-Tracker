@@ -1,9 +1,97 @@
 import SwiftUI
 import AppIntents
 
-// Views shared by the Live Activity, the Mac menu bar popover and (Phase 5)
-// the timeline widget. Lives in the app target and the widget extension via
+// Views shared by the Live Activity, the Mac menu bar popover and the
+// timeline widget. Lives in the app target and the widget extension via
 // the project's membershipExceptions.
+
+// MARK: - Helpers
+
+/// Returns a reference date anchored so that `Text(timerInterval:)` /
+/// `Text(_:style: .timer)` auto-counts up to the current daily total:
+/// `now - referenceDate == dailyElapsed + (now - startedAt)`.
+nonisolated func liveAnchor(elapsed: TimeInterval, startedAt: Date) -> Date {
+    startedAt.addingTimeInterval(-elapsed)
+}
+
+/// Formats elapsed seconds as MM:SS (under 1 h) or H:MM:SS (1 h+).
+/// No leading zero on hours; always two digits for minutes and seconds.
+nonisolated func fmtElapsed(_ t: TimeInterval) -> String {
+    let s = Int(max(0, t))
+    let h = s / 3600
+    let m = (s % 3600) / 60
+    let sec = s % 60
+    return h > 0
+        ? String(format: "%d:%02d:%02d", h, m, sec)
+        : String(format: "%02d:%02d", m, sec)
+}
+
+// MARK: - AppIconView
+
+/// App icon view.
+/// Fallback: toffeeBrown rounded rect + book glyph.
+/// Real icon: an Image Set named "RussianAppIcon" in the widget extension's
+/// Assets.xcassets covers the fallback automatically.
+struct AppIconView: View {
+    var size: CGFloat = 28
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .fill(Color.toffeeBrown)
+            Image(systemName: "book.fill")
+                .font(.system(size: size * 0.44, weight: .semibold))
+                .foregroundStyle(Color.eggshell)
+            Image("RussianAppIcon")
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Widget Play/Pause Button
+
+/// The Start/Pause control used by the Live Activity and the widget. Fires
+/// `ToggleTimerIntent`, which performs the Clock Action in the suite.
+struct WidgetPlayPauseButton: View {
+    let isRunning: Bool
+    var size: CGFloat = 44
+
+    var body: some View {
+        Button(intent: ToggleTimerIntent()) {
+            ZStack {
+                Circle()
+                    .fill(isRunning ? Color.eggshell.opacity(0.9) : Color.rosyCopper)
+                    .shadow(
+                        color: isRunning
+                            ? Color.toffeeBrown.opacity(0.18)
+                            : Color.rosyCopper.opacity(0.55),
+                        radius: isRunning ? 3 : 7,
+                        x: 0,
+                        y: isRunning ? 2 : 6
+                    )
+                if isRunning {
+                    Circle()
+                        .strokeBorder(Color.toffeeBrown.opacity(0.25), lineWidth: 1)
+                }
+                Image(systemName: isRunning ? "pause.fill" : "play.fill")
+                    .font(.system(size: size * 0.32, weight: .medium))
+                    .foregroundStyle(isRunning ? Color.toffeeInk : Color(hex: "#FDF6E3"))
+                    .offset(x: isRunning ? 0 : size * 0.034)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(width: size, height: size)
+        }
+        .buttonStyle(.plain)
+    }
+}
 
 // MARK: - Widget Study Type Dots
 
@@ -42,6 +130,41 @@ struct WidgetStudyTypeDots: View {
 
 // MARK: - Timer Digits
 
+/// H:MM:SS with colons rendered in lightBronze at regular weight. Static —
+/// used when the Clock is paused. A running Clock uses `Text(timerInterval:)`.
+struct TimerDigitsView: View {
+    let elapsed: TimeInterval
+    var size: CGFloat = 40
+
+    private var h: Int { Int(max(0, elapsed)) / 3600 }
+    private var m: Int { (Int(max(0, elapsed)) % 3600) / 60 }
+    private var s: Int { Int(max(0, elapsed)) % 60 }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            digit(String(h))
+            colon
+            digit(String(format: "%02d", m))
+            colon
+            digit(String(format: "%02d", s))
+        }
+    }
+
+    private func digit(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: size, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(Color.toffeeInk)
+    }
+
+    private var colon: some View {
+        Text(":")
+            .font(.system(size: size, weight: .regular))
+            .foregroundStyle(Color.lightBronze)
+            .baselineOffset(size * 0.1)
+            .padding(.horizontal, 2)
+    }
+}
 
 // MARK: - Goal Progress Bar
 
