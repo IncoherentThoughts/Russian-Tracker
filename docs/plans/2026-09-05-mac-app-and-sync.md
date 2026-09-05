@@ -115,7 +115,7 @@ Status (2026-09-05, branch `p4-hotkeys`): implemented.
 - `Views/Settings/KeyboardShortcutsSection.swift`: the "Keyboard Shortcuts" group (macOS only), inserted after the Timer group in `SettingsView`.
 - `Models/AppShortcuts.swift` (app target only): `StartTimerIntent`, `PauseTimerIntent`, `RussianShortcuts: AppShortcutsProvider` (Start, Pause, Toggle, Set Study Type). `presentLiveActivity`/`notifyApp` in `ToggleTimerIntent.swift` were made internal so the new intents share them.
 
-## Phase 5 — Notification Center widget and Control Center
+## Phase 5 — Notification Center widget and Control Center ✅ code done 2026-09-05, device verification pending
 
 1. Add `macosx` to the widget extension's `SUPPORTED_PLATFORMS`; guard the Live Activity and `ActivityKit` imports with `#if os(iOS)`. Add the Mac App Group entitlement (see Phase 0.4).
 2. New `RussianTimerWidget` (timeline widget) in `Russian Timer Widget/TimerWidget.swift`, families `.systemSmall`, `.systemMedium`, added to `WidgetBundle`. Register it for iOS too (free Home Screen widget) but ship it only when it looks right there.
@@ -126,6 +126,8 @@ Status (2026-09-05, branch `p4-hotkeys`): implemented.
 3. `ControlWidget`: `ControlWidgetToggle` bound to `ToggleTimerIntent`, symbol `book.fill` / `pause.fill`, title "Russian Timer".
 
 Exit: widget added to Notification Center starts/pauses the Clock and switches type; Control Center tile toggles.
+
+Notes from doing it: the widget extension now builds for `iphoneos iphonesimulator macosx` (`SDKROOT = auto`, own `Russian Timer WidgetExtension.macOS.entitlements` with sandbox + App Group); the ActivityKit link and the whole Live Activity file are iOS-only. `TimerWidget.swift` holds `RussianTimerWidget` (small + medium, one `.never` entry; on macOS a second entry three minutes after the last `appHeartbeat` carries the stale hint). `TimerManager` writes `appHeartbeat` on macOS on every adopt/action and every 60 s while running, and calls `WidgetCenter.reloadAllTimelines()` + `ControlCenter.reloadAllControls()` after every state change on both platforms. `ControlWidget.swift` adds `RussianTimerControl` with its own `SetClockRunningIntent: SetValueIntent` (a `ControlWidgetToggle` needs a `SetValueIntent`, which `ToggleTimerIntent` is not). Control Center controls are iOS 18+ / macOS 26+ in the SDK (not macOS 15), so the bundle gates the control with `if #available(iOS 18.0, macOS 26.0, *)`.
 
 ## Phase 6 — Verification and docs
 
