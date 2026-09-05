@@ -36,6 +36,19 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 - Play/Pause button controls the timer directly from the Lock Screen (no app open required)
 - Dynamic Island: compact, expanded (long-press), and minimal presentations
 
+### macOS
+- Menu bar agent: an icon that shows the ticking daily time only while the Clock is running; click for a popover with today, all-time, Start/Pause, Study Type switcher, Daily Goal bar, Open and Quit
+- The full app window (same three screens) opens on demand; closing it returns to the menu bar without quitting
+- Global keyboard shortcuts, recordable in Settings: ⌥0 Start/Pause, ⌥1 Grammar, ⌥2 Immersion, ⌥3 Output
+- Notification Center widget (small and medium, interactive) and a Control Center toggle
+- App Shortcuts for Siri and the Shortcuts app: Start, Pause, Toggle, Set Study Type
+
+### Cross-device sync
+- One shared Clock per Apple ID over iCloud (CloudKit private database via SwiftData)
+- Start on one device, pause on another; the later action wins
+- Sessions and the daily goal sync; all-time totals are derived from sessions
+- Works offline; Settings shows one muted sync status line
+
 ---
 
 ## Tech Stack
@@ -47,7 +60,10 @@ A minimal, distraction-free iOS app for tracking daily and cumulative Russian st
 | Persistence | SwiftData (session history) + shared UserDefaults (timer state) |
 | Charts | Swift Charts (native, no third-party libraries) |
 | Live Activity | ActivityKit + AppIntents (`ToggleTimerIntent`) |
-| Minimum target | iOS 17+ |
+| Sync | SwiftData + CloudKit (`iCloud.com.evan.russiantracker`) |
+| Widgets | WidgetKit timeline widget + Control Center control |
+| Mac hotkeys | [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (SPM) |
+| Minimum target | iOS 17.6, macOS 15 |
 
 ---
 
@@ -90,7 +106,8 @@ Russian Timer Widget/
 1. Clone the repo and open `Russian Tracker.xcodeproj` in Xcode.
 2. Set your development team in **Signing & Capabilities** for both the `Russian Tracker` and `Russian Timer Widget` targets.
 3. Verify the App Group `group.evan.russiantimer` is configured in **Signing & Capabilities** for both targets.
-4. Build and run on a physical device (iOS 17+). The Live Activity cannot be tested in Simulator.
+4. Enable the **iCloud → CloudKit** capability with container `iCloud.com.evan.russiantracker` on both targets (needs the paid Apple Developer Program; without it the app silently runs local-only).
+5. Build and run on a physical device (iOS 17.6+) or on the Mac (macOS 15+). The Live Activity cannot be tested in Simulator.
 
 > `NSSupportsLiveActivities` is already set to `YES` in the main app's `Info.plist`.
 
@@ -106,7 +123,7 @@ Russian Timer Widget/
 
 **Live Activity toggle** — `ToggleTimerIntent` runs entirely in the widget extension process. It reads and writes directly to the shared UserDefaults suite and pushes an updated `ActivityContent` to the Live Activity, so the lock screen reflects the new state immediately without opening the app.
 
-**Backup format** — Exports are plain JSON files containing all `StudySession` records plus `dailyElapsed`, `totalElapsed`, and `lastResetDate`. Importing restores all sessions to SwiftData and writes the timer values back to UserDefaults, then calls `onForeground()` to rehydrate in-memory state (including re-running the 4 AM boundary check for cross-day restores).
+**Backup format** — Exports are plain JSON files containing all `StudySession` records plus the current Study Day's elapsed time. Importing restores all sessions to SwiftData and writes the timer values back to UserDefaults, then calls `onForeground()` to rehydrate in-memory state (including re-running the 4 AM boundary check for cross-day restores).
 
 ---
 

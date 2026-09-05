@@ -220,10 +220,17 @@ Shared UserDefaults keys are listed in `TimerKey` (`Models/RussianTimerAttribute
 
 ## macOS Considerations
 
-- Use SwiftUI `#if os(macOS)` conditionals for platform-specific layout adjustments
-- macOS version: single window, minimum size 400×600pt
-- No Live Activity on macOS (not applicable) — use `#if os(iOS)` guards around all ActivityKit code
-- Menu bar item optional stretch goal: show running/paused status + elapsed time in menu bar
+The Mac app is a native SwiftUI build of the same target (`SUPPORTED_PLATFORMS` includes `macosx`, minimum macOS 15), not Catalyst.
+
+- **Shape**: menu bar agent (`LSUIElement = true`). `Mac/AppDelegate.swift` switches the activation policy to `.regular` while the main window is open and back to `.accessory` when it closes. Closing the window never quits; Quit lives in the popover and on ⌘Q. No launch-at-login feature.
+- **Menu Bar Item**: `book.fill` glyph; the ticking daily elapsed time is appended only while the Clock is running (`Mac/MenuBarPopoverView.swift`). The popover shows today, all-time, Start/Pause, the Study Type dots, the Daily Goal bar, Open, Quit.
+- **Window**: `Window("Russian Tracker", id: "main")`, fixed 420×780, same three screens and capsule tab bar. ⌘1/⌘2/⌘3 select tabs through `WindowNavigation` in the environment.
+- **Rollover**: `Mac/MacRolloverScheduler.swift` fires at the next 4am boundary, on wake, on key-window changes and on clock/time-zone changes, calling `timer.onForeground()`.
+- **Hotkeys**: global and recordable via the `KeyboardShortcuts` package (`Mac/Hotkeys.swift`). Defaults ⌥0 toggle, ⌥1/⌥2/⌥3 = Grammar/Immersion/Output. Feedback is the Menu Bar Item only. Recorder UI in Settings (`Views/Settings/KeyboardShortcutsSection.swift`).
+- **Widget**: the widget extension builds for macOS too. `Russian Timer Widget/TimerWidget.swift` is the Notification Center / Home Screen timeline widget (small + medium, interactive). It shows "Open Russian Tracker to sync" on macOS when the app heartbeat (`TimerKey.appHeartbeat`, written every 60 s while running) is older than 3 minutes. `ControlWidget.swift` is the Control Center toggle (iOS 18+, macOS 26+ per the SDK).
+- **No Live Activity on macOS**: all ActivityKit code stays behind `#if os(iOS)`; `ClockIntent` aliases `LiveActivityIntent` on iOS and `AppIntent` on macOS.
+- **App Shortcuts** (both platforms): `Models/AppShortcuts.swift` exposes Start, Pause, Toggle, Set Study Type.
+- Export on macOS uses `fileExporter`; iOS uses the share sheet.
 
 ---
 
@@ -264,11 +271,11 @@ class StudySession {
 ## Stretch Goals (Post-MVP)
 
 - [ ] Apple Watch complication (mirrors Live Activity display)
-- [ ] iCloud sync via CloudKit so stats persist across devices
+- [x] iCloud sync via CloudKit so stats persist across devices (ADR 0001)
 - [ ] Daily study goal setting with notification reminder
 - [ ] Export study data as CSV
-- [ ] macOS menu bar mini-timer
-- [ ] Siri Shortcut: "Start my Russian timer"
+- [x] macOS menu bar mini-timer
+- [x] Siri Shortcut: "Start my Russian timer" (App Shortcuts)
 
 ---
 
@@ -327,4 +334,4 @@ The app should feel **invisible and frictionless** when in use. A user mid-sessi
 
 5. **One job per screen.** The Timer screen does one thing: track. Settings does one thing: configure. Stats does one thing: reflect. Nothing bleeds across. No upsells, tips, or cross-screen nudges.
 
-*Last updated: 2026-03-14 — design context added via /teach-impeccable.*
+*Last updated: 2026-09-05 — Mac app, CloudKit sync, hotkeys, widget (see docs/plans/2026-09-05-mac-app-and-sync.md).*

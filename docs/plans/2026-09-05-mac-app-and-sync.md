@@ -129,7 +129,7 @@ Exit: widget added to Notification Center starts/pauses the Clock and switches t
 
 Notes from doing it: the widget extension now builds for `iphoneos iphonesimulator macosx` (`SDKROOT = auto`, own `Russian Timer WidgetExtension.macOS.entitlements` with sandbox + App Group); the ActivityKit link and the whole Live Activity file are iOS-only. `TimerWidget.swift` holds `RussianTimerWidget` (small + medium, one `.never` entry; on macOS a second entry three minutes after the last `appHeartbeat` carries the stale hint). `TimerManager` writes `appHeartbeat` on macOS on every adopt/action and every 60 s while running, and calls `WidgetCenter.reloadAllTimelines()` + `ControlCenter.reloadAllControls()` after every state change on both platforms. `ControlWidget.swift` adds `RussianTimerControl` with its own `SetClockRunningIntent: SetValueIntent` (a `ControlWidgetToggle` needs a `SetValueIntent`, which `ToggleTimerIntent` is not). Control Center controls are iOS 18+ / macOS 26+ in the SDK (not macOS 15), so the bundle gates the control with `if #available(iOS 18.0, macOS 26.0, *)`.
 
-## Phase 6 — Verification and docs
+## Phase 6 — Verification and docs (docs ✅ 2026-09-05; device checklist pending)
 
 Scenario checklist, each run on real devices:
 - Start on Mac, phone app open → phone shows running within seconds; pause on phone → Mac stops.
