@@ -5,35 +5,53 @@ import SwiftUI
 // MARK: - Menu Bar Item label
 
 /// The status-bar label: the app icon as a monochrome template glyph
-/// (`MenuBarIcon` in the asset catalog, so it takes the menu bar's tint and
-/// inverts with the appearance), plus today's ticking elapsed time only
-/// while the Clock is running. Driven by `TimerManager.tick` through
+/// (`MenuBarIcon` in the asset catalog), plus today's ticking elapsed time
+/// only while the Clock is running. Driven by `TimerManager.tick` through
 /// `computedDaily`, so it advances once a second without any timer of its own.
+///
+/// `MenuBarExtra` flattens its label to a single image and title, discarding
+/// stacks, spacing, hidden views and fixed frames. So the icon and the time
+/// are drawn together into one template `NSImage` whose width is reserved
+/// for the widest string with the same digit count; the item then stays put
+/// while the seconds tick, and the gap after the icon is exactly ours.
 struct MenuBarLabel: View {
     @Environment(TimerManager.self) private var timer
 
     var body: some View {
         if timer.isRunning {
-            HStack(spacing: 7) {
-                Image("MenuBarIcon")
-                // Reserve the width of the widest string with this many
-                // digits so the item stays put while the seconds tick;
-                // otherwise every change nudges the neighbouring icons.
-                ZStack(alignment: .leading) {
-                    Text(placeholder(for: timer.computedDaily.menuBarFormatted))
-                        .hidden()
-                    Text(timer.computedDaily.menuBarFormatted)
-                }
-                .monospacedDigit()
-            }
+            Image(nsImage: MenuBarLabelImage.make(text: timer.computedDaily.menuBarFormatted))
         } else {
             Image("MenuBarIcon")
         }
     }
+}
 
-    /// Same shape as `text`, every digit replaced by the widest one.
-    private func placeholder(for text: String) -> String {
-        String(text.map { $0.isNumber ? "8" : $0 })
+enum MenuBarLabelImage {
+    private static let height: CGFloat = 22
+    private static let iconSide: CGFloat = 18
+    private static let gap: CGFloat = 8
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+
+    static func make(text: String) -> NSImage {
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        // Same shape as `text` with every digit replaced by the widest one,
+        // so the width only steps at 9:59 → 10:00 and 59:59 → 1:00:00.
+        let placeholder = String(text.map { $0.isNumber ? "8" : $0 })
+        let textWidth = ceil((placeholder as NSString).size(withAttributes: attrs).width)
+        let size = NSSize(width: iconSide + gap + textWidth, height: height)
+
+        let image = NSImage(size: size, flipped: false) { rect in
+            if let icon = NSImage(named: "MenuBarIcon") {
+                let iconRect = NSRect(x: 0, y: (rect.height - iconSide) / 2, width: iconSide, height: iconSide)
+                icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            let textSize = (text as NSString).size(withAttributes: attrs)
+            let origin = NSPoint(x: iconSide + gap, y: (rect.height - textSize.height) / 2)
+            (text as NSString).draw(at: origin, withAttributes: attrs)
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
 
