@@ -38,14 +38,14 @@ struct ToggleTimerIntent: ClockIntent {
     }
 }
 
-// MARK: - Live Activity helpers shared by the intents
+// MARK: - Live Activity helpers shared by the intents (also used by AppShortcuts.swift)
 
 #if os(iOS)
 /// Push `snap` to every on-screen activity. A `.stale` activity is still on
 /// screen (just flagged old), so it is refreshed too; update() with a fresh
 /// staleDate brings it back to .active. When nothing is on screen and
 /// `allowRequest` is set, a fresh activity is requested instead.
-private func presentLiveActivity(for snap: ClockSnapshot, allowRequest: Bool) async {
+func presentLiveActivity(for snap: ClockSnapshot, allowRequest: Bool) async {
     let content = ActivityContent(
         state: snap.liveActivityState,
         staleDate: Date.now.addingTimeInterval(liveActivityIdleTimeout)
@@ -77,13 +77,13 @@ private func presentLiveActivity(for snap: ClockSnapshot, allowRequest: Bool) as
 
 #else
 /// No Live Activity on macOS; the Menu Bar Item and widget re-read the suite.
-private func presentLiveActivity(for snap: ClockSnapshot, allowRequest: Bool) async {}
+func presentLiveActivity(for snap: ClockSnapshot, allowRequest: Bool) async {}
 #endif
 
 /// Tell the running app to adopt the state just written to the suite, so its
 /// in-memory `TimerManager` does not diverge from the widget. Delivered to all
 /// processes, including the app's own when it is foregrounded.
-private func notifyApp() {
+func notifyApp() {
     CFNotificationCenterPostNotification(
         CFNotificationCenterGetDarwinNotifyCenter(),
         CFNotificationName(timerStateChangedNotification as CFString),

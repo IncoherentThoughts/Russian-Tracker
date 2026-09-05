@@ -103,6 +103,11 @@ Exit: launching shows only a menu bar item; popover starts/pauses; window opens 
 
 Exit: ⌥0 in Safari toggles; the Menu Bar Item ticks; Shortcuts app lists the four actions.
 
+Status (2026-09-05, branch `p4-hotkeys`): implemented.
+- `Mac/Hotkeys.swift`: the four `KeyboardShortcuts.Name`s with ⌥0–⌥3 defaults and `Hotkeys.install(timer:)`. The App must call `Hotkeys.install(timer: timer)` once at launch under `#if os(macOS)`; not wired here.
+- `Views/Settings/KeyboardShortcutsSection.swift`: the "Keyboard Shortcuts" group (macOS only), inserted after the Timer group in `SettingsView`.
+- `Models/AppShortcuts.swift` (app target only): `StartTimerIntent`, `PauseTimerIntent`, `RussianShortcuts: AppShortcutsProvider` (Start, Pause, Toggle, Set Study Type). `presentLiveActivity`/`notifyApp` in `ToggleTimerIntent.swift` were made internal so the new intents share them.
+
 ## Phase 5 — Notification Center widget and Control Center
 
 1. Add `macosx` to the widget extension's `SUPPORTED_PLATFORMS`; guard the Live Activity and `ActivityKit` imports with `#if os(iOS)`. Add the Mac App Group entitlement (see Phase 0.4).
