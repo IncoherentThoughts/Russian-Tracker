@@ -315,6 +315,10 @@ final class SyncClient {
             }
             let pending = store.sessionsNeedingUpload()
             if !pending.isEmpty {
+                // Remember each row's `updatedAt` as it goes out: a local write
+                // can land while the upload is in flight, and that newer value
+                // must keep `needsUpload` (see `StudyStore.markUploaded`).
+                let sent = pending.map { (session: $0, sentAt: $0.updatedAt) }
                 let rows = pending.map { s in
                     SessionRow(
                         user_id: uid,
@@ -328,7 +332,7 @@ final class SyncClient {
                     )
                 }
                 try await client.from("sessions").upsert(rows, onConflict: "user_id,date").execute()
-                store.markUploaded(pending)
+                store.markUploaded(sent)
             }
             lastError = nil
             retryTask?.cancel()
