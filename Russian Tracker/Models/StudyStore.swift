@@ -173,8 +173,15 @@ final class StudyStore {
         fetchAllSessions().filter { $0.needsUpload }
     }
 
-    func markUploaded(_ sessions: [StudySession]) {
-        for s in sessions { s.needsUpload = false }
+    /// Clear `needsUpload` on Sessions an upload reached. Each entry pairs a
+    /// Session with the `updatedAt` it carried when its row was sent. A Session
+    /// written again while the upload was in flight no longer matches, so it
+    /// keeps its flag and goes out on the next flush instead of being stranded
+    /// here (and later overwritten by the stale server row on a pull).
+    func markUploaded(_ uploaded: [(session: StudySession, sentAt: Date)]) {
+        for (session, sentAt) in uploaded where session.updatedAt == sentAt {
+            session.needsUpload = false
+        }
         try? modelContext?.save()
     }
 
